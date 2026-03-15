@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Generative UI Playground</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Generative UI Playground</h1>
+    <fieldset class="modules">
+      <legend>Guidelines 模块</legend>
+      <label><input type="checkbox" name="mod" value="core" checked /> core</label>
+      <label><input type="checkbox" name="mod" value="diagram" checked /> diagram</label>
+      <label><input type="checkbox" name="mod" value="chart" checked /> chart</label>
+      <label><input type="checkbox" name="mod" value="interactive" checked /> interactive</label>
+      <label><input type="checkbox" name="mod" value="mockup" checked /> mockup</label>
+      <label><input type="checkbox" name="mod" value="art" checked /> art</label>
+    </fieldset>
+  </header>
+
+  <main class="main">
+    <div id="messages" class="messages"></div>
+    <form id="form" class="form">
+      <textarea id="input" class="input" rows="2" placeholder="输入测试 prompt，例如：解释 JWT 认证流程"></textarea>
+      <button type="submit" class="send">发送</button>
+    </form>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

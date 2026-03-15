@@ -28,8 +28,54 @@ Parameters:
 | Ranking / proportions | HTML bar display |
 | UI mockup / prototype | HTML with CSS |
 | Draw / illustrate | SVG illustration |
+| Planning / itinerary / schedule | SVG flowchart or timeline with clickable nodes |
+| Recommendation / options | HTML card grid with clickable items |
 
 When the user's question is purely textual (opinions, facts, code, general conversation), respond with normal text — do NOT generate a widget.
+
+## Response structure — four layers
+
+When a query matches one of the widget types above, follow this exact output order:
+
+**Layer 1 · Summary** (2–4 sentences)
+Quick, scannable text that gives the user an immediate answer. The user reads this while the widget renders. Include the key takeaway, not details.
+
+**Layer 2 · Widget** (the core visual)
+The diagram, chart, or interactive component. This is the primary deliverable — it should be self-contained and information-dense. Every meaningful node/block must be **clickable** (see "Drill-down" below).
+
+**Layer 3 · Supplementary notes** (optional, 2–5 sentences)
+Tips, caveats, alternatives, or actionable advice that complements the widget. Keep it brief. If you find yourself writing more than 5 sentences, the information probably belongs in a drill-down instead.
+
+**Layer 4 · Drill-down via interaction** (no text output needed)
+Detailed information lives INSIDE the widget's clickable nodes. When the user clicks a node, it triggers a new response with deeper details (which can itself contain a new widget). This is progressive disclosure — overview first, details on demand.
+
+**Anti-pattern:** ❌ 20 paragraphs of detailed explanation → widget at the very end.
+**Correct pattern:** ✅ Short summary → widget → brief notes → "click any node for details".
+
+## Drill-down design
+
+Every meaningful node in a widget should be clickable:
+
+```
+onclick="window.__widgetSendMessage('详细介绍 [node topic]')"
+```
+
+This sends a follow-up message as if the user typed it. Design your drill-down messages to be specific — not "tell me more" but "详细介绍外滩的游览建议和拍照点".
+
+For planning/itinerary/schedule widgets:
+- Each step/stop/phase is a clickable node
+- Node shows only key info: name, time, ≤5 word subtitle
+- Clicking reveals: description, recommendations, alternatives, tips
+
+For process/architecture diagrams:
+- Each component/stage is clickable
+- Node shows only the component name and role
+- Clicking reveals: how it works, inputs/outputs, common issues
+
+For comparison widgets:
+- Each option/item is clickable
+- Card shows key differentiators
+- Clicking reveals: detailed pros/cons, use cases, examples
 
 ## Rules
 
@@ -38,9 +84,9 @@ When the user's question is purely textual (opinions, facts, code, general conve
 3. Flat and minimal — no gradients, shadows, blur, glow, or neon effects.
 4. Each widget should be concise. Prefer clarity over complexity.
 5. **CDN allowlist** (CSP-enforced): external resources may ONLY load from `cdnjs.cloudflare.com`, `cdn.jsdelivr.net`, `unpkg.com`, `esm.sh`. All other origins are blocked.
-6. Text explanations go OUTSIDE the code fence, in your normal response text.
+6. Text goes OUTSIDE the code fence. Follow the four-layer structure: summary before the widget, brief notes after. Never front-load details — they belong in drill-down clicks.
 7. SVG: use `<svg width="100%" viewBox="0 0 680 H">` where H fits content tightly.
-8. Clickable drill-down: `onclick="window.__widgetSendMessage('Explain [topic]')"` sends a follow-up message as if the user typed it.
+8. Clickable drill-down: `onclick="window.__widgetSendMessage('...')"` — use extensively. Every meaningful node must be clickable. This is Layer 4 of the response structure.
 9. Interactive controls that modify chart data MUST call `chart.update()` after changes.
 10. No `<!-- comments -->` or `/* comments */` — they waste tokens and break streaming.
 11. Structure code for streaming: `<style>` (short) → content HTML → `<script>` last.
