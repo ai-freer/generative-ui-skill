@@ -1,19 +1,21 @@
 # Generative UI Skill
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 让任何 chatbot 的文本输出能够承载交互式 UI 组件 —— 图表、架构图、计算器、数据可视化 —— 无需前端改造，任何能输出 markdown 的模型都能驱动。
 
 ## 致谢
 
-本项目的灵感和核心技术参考来自以下开源项目和作者，在此特别致谢：
+本项目的灵感和核心技术参考来自以下作者和开源项目，在此特别致谢：
 
-- **[CodePilot](https://github.com/op7418/CodePilot)**（[@op7418](https://github.com/op7418)）—— 复刻了 Claude.ai 的生成式 UI 交互能力，验证了代码围栏 + sandbox iframe 方案的可行性，并证明 Kimi K2.5、Minimax M2.5 等国产模型同样能驱动该能力。原文：[《我复刻了 Claude 刚发布的生成式 UI 交互！》](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g)（歸藏的AI工具箱）
-- **[pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)**（[Michaelliv](https://github.com/Michaelliv)）—— 逆向工程了 Claude.ai 原生 `show_widget` 实现，提取了完整的 Anthropic 设计指南（~72KB），并用 morphdom + Glimpse 在终端 agent 中复现了流式渲染体验。逆向工程文章：[Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
+- **[@op7418（歸藏）](https://github.com/op7418)**—— 其文章[《我复刻了 Claude 刚发布的生成式 UI 交互！》](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g)验证了代码围栏 + sandbox iframe 方案的可行性，并证明 Kimi K2.5、Minimax M2.5 等国产模型同样能驱动该能力，为本项目提供了核心灵感。
+- **[pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)**（[Michaelliv](https://github.com/Michaelliv)，MIT 协议）—— 逆向工程了 Claude.ai 原生 `show_widget` 实现，提取了完整的 Anthropic 设计指南（~72KB），并用 morphdom + Glimpse 在终端 agent 中复现了流式渲染体验。本项目的 `prompts/guidelines/` 设计指南即基于该项目提取适配。逆向工程文章：[Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
 
 ---
 
 ## 项目背景
 
-2026-03-15，Anthropic 在 Claude.ai 上线了生成式 UI 交互 —— 模型可以在对话中内联渲染交互式 HTML/SVG 组件。CodePilot 用开源方案复刻了这套能力。
+2026-03-12，Anthropic 在 Claude.ai 上线了生成式 UI 交互 —— 模型可以在对话中内联渲染交互式 HTML/SVG 组件。CodePilot 用开源方案复刻了这套能力。
 
 本项目的目标：把这套能力抽象成**通用 Skill**，让 OpenClaw 管理的所有 chatbot 和 AI agent 都能生成富 UI 回复。
 
@@ -207,8 +209,16 @@ Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），
 
 ## 参考资料
 
-- CodePilot 仓库：https://github.com/op7418/CodePilot（MIT 协议）
-- pi-generative-ui 仓库：https://github.com/Michaelliv/pi-generative-ui
-- 逆向工程文章：https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/
-- 原文：https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g
+- 歸藏原文：[《我复刻了 Claude 刚发布的生成式 UI 交互！》](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g)
+- 逆向工程文章：[Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
+- pi-generative-ui 仓库：https://github.com/Michaelliv/pi-generative-ui （MIT 协议）
+- CodePilot 仓库：https://github.com/op7418/CodePilot （未声明开源协议）
 - Obsidian 存档：Knowledge/2026-03-15-claude-generative-ui.md（含 16 张图片）
+
+---
+
+## 协议
+
+本项目基于 [Apache License 2.0](./LICENSE) 开源。
+
+使用本项目时，请保留 [NOTICE](./NOTICE) 文件中的版权声明和第三方归属信息。

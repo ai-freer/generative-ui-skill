@@ -2,7 +2,7 @@
   "name": "generative-ui-skill",
   "version": "0.1.0",
   "description": "让任何 chatbot 的文本输出能够承载交互式 UI 组件",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/ai-freer/generative-ui-skill"
