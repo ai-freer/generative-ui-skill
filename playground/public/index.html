@@ -9,24 +9,54 @@
 <body>
   <header class="header">
     <h1>Generative UI Playground</h1>
-    <fieldset class="modules">
-      <legend>Guidelines 模块</legend>
-      <label><input type="checkbox" name="mod" value="core" checked /> core</label>
-      <label><input type="checkbox" name="mod" value="diagram" checked /> diagram</label>
-      <label><input type="checkbox" name="mod" value="chart" checked /> chart</label>
-      <label><input type="checkbox" name="mod" value="interactive" checked /> interactive</label>
-      <label><input type="checkbox" name="mod" value="mockup" checked /> mockup</label>
-      <label><input type="checkbox" name="mod" value="art" checked /> art</label>
-    </fieldset>
   </header>
 
-  <main class="main">
-    <div id="messages" class="messages"></div>
-    <form id="form" class="form">
-      <textarea id="input" class="input" rows="2" placeholder="输入测试 prompt，例如：解释 JWT 认证流程"></textarea>
-      <button type="submit" class="send">发送</button>
-    </form>
-  </main>
+  <div class="app-layout">
+    <aside class="sidebar sidebar-left" id="sidebarLeft">
+      <div class="sidebar-header">
+        <button type="button" class="btn-new-chat" id="btnNewChat">+ 新对话</button>
+      </div>
+      <nav class="session-list" id="sessionList" aria-label="会话列表">
+        <!-- sessions rendered by app.js -->
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div id="messages" class="messages"></div>
+      <form id="form" class="form">
+        <div id="suggestionTags" class="suggestion-tags"></div>
+        <textarea id="input" class="input" rows="2" placeholder="输入测试 prompt"></textarea>
+        <button type="submit" class="send">发送</button>
+      </form>
+    </main>
+
+    <aside class="sidebar sidebar-right" id="sidebarRight">
+      <section class="sidebar-section">
+        <h2 class="sidebar-title">模型</h2>
+        <label class="sidebar-label">Provider</label>
+        <select id="providerSelect" class="sidebar-select" aria-label="选择 Provider"></select>
+        <label class="sidebar-label">Model</label>
+        <select id="modelSelect" class="sidebar-select" aria-label="选择模型"></select>
+        <p id="modelStatus" class="sidebar-status" aria-live="polite"></p>
+      </section>
+      <section class="sidebar-section">
+        <h2 class="sidebar-title">搜索</h2>
+        <label><input type="checkbox" id="searchToggle" checked /> 启用联网搜索</label>
+        <p id="searchStatus" class="sidebar-status"></p>
+      </section>
+      <section class="sidebar-section">
+        <h2 class="sidebar-title">Guidelines 模块</h2>
+        <fieldset class="modules">
+          <label><input type="checkbox" name="mod" value="core" checked /> core</label>
+          <label><input type="checkbox" name="mod" value="diagram" checked /> diagram</label>
+          <label><input type="checkbox" name="mod" value="chart" checked /> chart</label>
+          <label><input type="checkbox" name="mod" value="interactive" checked /> interactive</label>
+          <label><input type="checkbox" name="mod" value="mockup" checked /> mockup</label>
+          <label><input type="checkbox" name="mod" value="art" checked /> art</label>
+        </fieldset>
+      </section>
+    </aside>
+  </div>
 
   <script src="app.js"></script>
 </body>

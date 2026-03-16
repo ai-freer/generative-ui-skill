@@ -1,10 +1,746 @@
 (function () {
+  const STORAGE_KEY = 'gu-sessions';
+
+  const SAMPLE_PROMPTS = [
+    '解释 JWT 认证流程',
+    '展示过去 6 个月的 OpenAI 用户增长趋势',
+    '做一个 BMI 计算器',
+    '比较 REST 和 GraphQL',
+    '画一下 Kubernetes 的架构',
+    '做一个 D3.js 的数据可视化',
+    '设计一个电商 App 的商品详情页，包含主要功能模块',
+    '用可视化的方式演示冒泡排序的过程，最好能一步步操作',
+    '帮我设计一个赛博朋克风格的虚拟咖啡品牌，包括品牌名、视觉风格和菜单概念',
+    '分析一个 SaaS 产品从获客到留存的完整用户生命周期，给出优化建议',
+    '给我一些日式侘寂风格的室内设计灵感，用视觉方式呈现',
+  ];
+
+  function pickRandom(arr, n) {
+    const shuffled = [...arr].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, n);
+  }
+
   const form = document.getElementById('form');
   const input = document.getElementById('input');
   const messagesEl = document.getElementById('messages');
+  const sessionListEl = document.getElementById('sessionList');
+  const btnNewChat = document.getElementById('btnNewChat');
+  const providerSelect = document.getElementById('providerSelect');
+  const modelSelect = document.getElementById('modelSelect');
+  const modelStatusEl = document.getElementById('modelStatus');
+  const searchToggle = document.getElementById('searchToggle');
+  const searchStatusEl = document.getElementById('searchStatus');
+
+  let sessions = [];
+  let currentSessionId = null;
+  let providers = [];
 
   function getModules() {
     return Array.from(document.querySelectorAll('.modules input[name=mod]:checked')).map((el) => el.value);
+  }
+
+  function getSearchEnabled() {
+    return searchToggle ? searchToggle.checked : false;
+  }
+
+  function loadSessions() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      sessions = raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      sessions = [];
+    }
+  }
+
+  function saveSessions() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  }
+
+  function createSession() {
+    const provider = providers[0];
+    const model = provider?.models?.[0];
+    const session = {
+      id: crypto.randomUUID(),
+      title: '新对话',
+      provider: provider?.id ?? '',
+      model: model ?? '',
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    sessions.unshift(session);
+    saveSessions();
+    return session;
+  }
+
+  function getCurrentSession() {
+    return sessions.find((s) => s.id === currentSessionId);
+  }
+
+  function switchSession(id) {
+    currentSessionId = id;
+    const session = getCurrentSession();
+    if (session) {
+      renderMessages(session);
+      syncProviderModelFromSession(session);
+    }
+    renderSessionList();
+  }
+
+  function deleteSession(id, e) {
+    if (e) e.stopPropagation();
+    sessions = sessions.filter((s) => s.id !== id);
+    saveSessions();
+    if (currentSessionId === id) {
+      currentSessionId = sessions.length ? sessions[0].id : null;
+      if (currentSessionId) switchSession(currentSessionId);
+      else {
+        const newSession = createSession();
+        currentSessionId = newSession.id;
+        renderSessionList();
+        renderMessages(newSession);
+        syncProviderModelFromSession(newSession);
+      }
+    } else {
+      renderSessionList();
+    }
+  }
+
+  function renderSessionList() {
+    sessionListEl.innerHTML = '';
+    sessions.forEach((s) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'session-item' + (s.id === currentSessionId ? ' active' : '');
+      btn.setAttribute('data-session-id', s.id);
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'session-title';
+      titleSpan.textContent = s.title || '新对话';
+      btn.appendChild(titleSpan);
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-delete-session';
+      delBtn.textContent = '删除';
+      delBtn.setAttribute('aria-label', '删除会话');
+      delBtn.addEventListener('click', (ev) => deleteSession(s.id, ev));
+      btn.appendChild(delBtn);
+      btn.addEventListener('click', () => switchSession(s.id));
+      sessionListEl.appendChild(btn);
+    });
+  }
+
+  function syncProviderModelFromSession(session) {
+    if (!session) return;
+    fillModelSelect(session.provider);
+    providerSelect.value = session.provider || '';
+    modelSelect.value = session.model || '';
+  }
+
+  function reuseUserQuery(content, shouldSubmit) {
+    input.value = content;
+    input.focus();
+    if (!shouldSubmit) return;
+    if (form.querySelector('.send').disabled) return;
+    form.requestSubmit();
+  }
+
+  async function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const temp = document.createElement('textarea');
+    temp.value = text;
+    temp.setAttribute('readonly', '');
+    temp.style.position = 'absolute';
+    temp.style.left = '-9999px';
+    document.body.appendChild(temp);
+    temp.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(temp);
+    if (!copied) {
+      throw new Error('copy failed');
+    }
+  }
+
+  function setActionFeedback(button, nextLabel) {
+    const labelEl = button.querySelector('.msg-action-label');
+    if (!labelEl) return;
+    const originalLabel = button.getAttribute('data-label') || labelEl.textContent;
+    labelEl.textContent = nextLabel;
+    clearTimeout(Number(button.dataset.feedbackTimer || 0));
+    const timerId = window.setTimeout(() => {
+      labelEl.textContent = originalLabel;
+      delete button.dataset.feedbackTimer;
+    }, 1200);
+    button.dataset.feedbackTimer = String(timerId);
+  }
+
+  function createUserActionButton(type, label, iconSvg, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'msg-action-btn';
+    button.setAttribute('data-label', label);
+    button.setAttribute('data-action', type);
+    button.setAttribute('aria-label', label);
+    button.innerHTML =
+      '<span class="msg-action-icon" aria-hidden="true">' + iconSvg + '</span>' +
+      '<span class="msg-action-label">' + label + '</span>';
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function createUserMessageElement(content, messageIndex) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg user';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = content;
+    wrap.appendChild(bubble);
+
+    const actions = document.createElement('div');
+    actions.className = 'user-actions';
+
+    const retryIcon =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M13 3v4H9"></path><path d="M13 7a5 5 0 1 0 1 3"></path></svg>';
+    const copyIcon =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">' +
+      '<rect x="5" y="3" width="8" height="10" rx="2"></rect><path d="M3 11V5a2 2 0 0 1 2-2"></path></svg>';
+
+    actions.appendChild(createUserActionButton('retry', '重试', retryIcon, async (event) => {
+      await retryUserMessage(messageIndex, content, event.currentTarget);
+    }));
+
+    actions.appendChild(createUserActionButton('copy', '复制', copyIcon, async (event) => {
+      const button = event.currentTarget;
+      try {
+        await copyText(content);
+        setActionFeedback(button, '已复制');
+      } catch (_) {
+        reuseUserQuery(content, false);
+        setActionFeedback(button, '已回填');
+      }
+    }));
+
+    wrap.appendChild(actions);
+    return wrap;
+  }
+
+  function validateSessionForSend(session) {
+    if (!session) {
+      return false;
+    }
+    if (!session.provider || !session.model) {
+      alert('请先在右侧选择 Provider 和 Model');
+      return false;
+    }
+    return true;
+  }
+
+  function appendAssistantPlaceholder() {
+    const assistantWrap = document.createElement('div');
+    assistantWrap.className = 'msg assistant';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML =
+      '<p class="thinking">模型正在思考中…（这一步可能会稍慢一些）</p>' +
+      '<p class="typing"><span class="typing-dots"><span></span><span></span><span></span></span></p>';
+    assistantWrap.appendChild(bubble);
+    messagesEl.appendChild(assistantWrap);
+    return bubble;
+  }
+
+  async function streamAssistantReply(session, bubble, options) {
+    const onFailure = options?.onFailure;
+    form.querySelector('.send').disabled = true;
+    const providerName = getProviderName(session.provider);
+    setModelStatus(`正在调用 ${providerName || 'Provider'} · ${session.model}…`);
+
+    const apiMessages = session.messages.map((m) => ({ role: m.role, content: m.content }));
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: session.provider,
+          model: session.model,
+          messages: apiMessages,
+          modules: getModules(),
+          searchEnabled: getSearchEnabled(),
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        const handled = await onFailure?.({ status: res.status, errorText: errText });
+        if (!handled) {
+          bubble.innerHTML = '<p>请求失败: ' + res.status + ' ' + escapeHtml(errText.slice(0, 200)) + '</p>';
+          setModelStatus('调用失败，请稍后重试');
+        }
+        return false;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let rawBuffer = '';
+      let streamText = '';
+      const renderState = createRenderState(bubble);
+
+      let plannerActive = false;
+      let plannerEl = null;
+      let plannerContent = null; // final content from planner to save
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        rawBuffer += dec.decode(value, { stream: true });
+        const events = rawBuffer.split('\n\n');
+        rawBuffer = events.pop() || '';
+        for (const event of events) {
+          const line = event.split('\n')[0];
+          if (!line || !line.startsWith('data: ')) continue;
+          const payload = line.slice(6);
+          if (payload === '[DONE]') continue;
+          try {
+            const data = JSON.parse(payload);
+            if (data.error) {
+              renderState.activeTextEl.innerHTML = '<p>错误: ' + escapeHtml(data.error) + '</p>';
+              break;
+            }
+            if (data.searching) {
+              setModelStatus(`正在搜索: ${data.searching}`);
+              let searchingEl = bubble.querySelector('.searching-indicator');
+              if (!searchingEl) {
+                searchingEl = document.createElement('p');
+                searchingEl.className = 'thinking searching-indicator';
+                searchingEl.textContent = '正在搜索: ' + data.searching + '…';
+                bubble.appendChild(searchingEl);
+              }
+            }
+            if (data.text) {
+              streamText += data.text;
+              renderStreamChunk(renderState, streamText);
+            }
+            // --- Planner events ---
+            if (data.stream_status) {
+              if (data.stream_status === 'truncated') {
+                setModelStatus('检测到内容截断，准备重试…');
+              }
+            }
+            if (data.retrying) {
+              setModelStatus('正在重试生成…');
+            }
+            if (data.retry_success && data.content) {
+              // Retry succeeded — replace the truncated content with complete version
+              setModelStatus('重试成功，正在渲染…');
+              streamText = data.content;
+              // Reset render state and re-render from scratch
+              bubble.innerHTML = '';
+              const newState = createRenderState(bubble);
+              renderState.widgetCount = 0;
+              renderState.activeTextEl = newState.activeTextEl;
+              renderState.previewEl = null;
+              renderState.placeholderEl = null;
+              renderState.container = newState.container;
+              renderStreamChunk(renderState, streamText);
+            }
+            if (data.planning) {
+              plannerActive = true;
+              setModelStatus('正在规划生成方案…');
+              // Remove streaming preview / placeholder
+              if (renderState.previewEl) { renderState.previewEl.remove(); renderState.previewEl = null; }
+              if (renderState.placeholderEl) { renderState.placeholderEl.remove(); renderState.placeholderEl = null; }
+              plannerEl = document.createElement('div');
+              plannerEl.className = 'planner-progress';
+              plannerEl.innerHTML = '<p class="thinking">正在规划生成方案…</p>';
+              bubble.appendChild(plannerEl);
+            }
+            if (data.plan && plannerEl) {
+              renderPlannerTasks(plannerEl, data.plan);
+              setModelStatus(`规划完成，共 ${data.plan.tasks.length} 个子任务`);
+            }
+            if (data.subtask_start && plannerEl) {
+              updatePlannerTask(plannerEl, data.subtask_start.id, 'running', data.subtask_start.index, data.subtask_start.total);
+              setModelStatus(`正在生成 (${(data.subtask_start.index || 0) + 1}/${data.subtask_start.total || '?'}) ${data.subtask_start.description}`);
+            }
+            if (data.subtask_done && plannerEl) {
+              updatePlannerTask(plannerEl, data.subtask_done.id, data.subtask_done.widget_code ? 'done' : 'error');
+              if (data.subtask_done.widget_code) {
+                renderSubTaskWidget(bubble, data.subtask_done.id, data.subtask_done.widget_code);
+              }
+            }
+            if (data.assembling) {
+              setModelStatus('正在组装最终结果…');
+              if (plannerEl) {
+                const assembleNote = document.createElement('p');
+                assembleNote.className = 'thinking';
+                assembleNote.textContent = '正在组装最终结果…';
+                plannerEl.appendChild(assembleNote);
+              }
+            }
+            if (data.assembled && data.assembled.widget_code) {
+              // Replace all sub-task iframes with the final assembled widget
+              removeSubTaskWidgets(bubble);
+              const wrap = document.createElement('div');
+              wrap.className = 'widget-wrap';
+              const iframe = document.createElement('iframe');
+              iframe.sandbox = 'allow-scripts allow-same-origin';
+              iframe.title = 'assembled-widget';
+              iframe.srcdoc = buildWidgetDoc(data.assembled.widget_code);
+              wrap.appendChild(iframe);
+              // Insert after planner progress
+              if (plannerEl && plannerEl.nextSibling) {
+                bubble.insertBefore(wrap, plannerEl.nextSibling);
+              } else {
+                bubble.appendChild(wrap);
+              }
+              setModelStatus('');
+            }
+            if (data.planner_content) {
+              plannerContent = data.planner_content;
+            }
+            if (data.planning_failed) {
+              setModelStatus('规划失败: ' + data.planning_failed);
+              if (plannerEl) {
+                plannerEl.innerHTML = '<p>规划失败: ' + escapeHtml(data.planning_failed) + '</p>';
+              }
+            }
+            if (data.planner_error) {
+              setModelStatus('规划出错: ' + data.planner_error);
+            }
+          } catch (_) {}
+        }
+      }
+      if (rawBuffer) {
+        const line = rawBuffer.split('\n')[0];
+        if (line.startsWith('data: ') && line.slice(6) !== '[DONE]') {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.text) streamText += data.text;
+          } catch (_) {}
+        }
+      }
+      renderStreamChunk(renderState, streamText);
+
+      // Save content: use planner result if available, otherwise patch truncated fence
+      let contentToSave;
+      if (plannerContent) {
+        contentToSave = plannerContent;
+      } else {
+        contentToSave = patchIncompleteWidgetFence(streamText);
+      }
+      session.messages.push({ role: 'assistant', content: contentToSave });
+      saveSessions();
+      renderSessionList();
+      setModelStatus('');
+      return true;
+    } catch (err) {
+      const errText = err?.message || String(err);
+      const handled = await onFailure?.({ errorText: errText });
+      if (!handled) {
+        bubble.innerHTML = '<p>请求失败: ' + escapeHtml(errText.slice(0, 200)) + '</p>';
+        setModelStatus('调用失败，请稍后重试');
+      }
+      return false;
+    } finally {
+      form.querySelector('.send').disabled = false;
+      if (!modelStatusEl.textContent) {
+        setModelStatus('');
+      }
+    }
+  }
+
+  async function submitUserMessage(message) {
+    hideSuggestionTags();
+    const session = getCurrentSession();
+    if (!validateSessionForSend(session)) {
+      return;
+    }
+
+    session.messages.push({ role: 'user', content: message });
+    session.updatedAt = Date.now();
+    if (session.messages.length === 1) {
+      session.title = message.slice(0, 20) + (message.length > 20 ? '…' : '');
+    }
+    saveSessions();
+    renderSessionList();
+
+    const userBubble = createUserMessageElement(message, session.messages.length - 1);
+    messagesEl.appendChild(userBubble);
+
+    input.value = '';
+    const bubble = appendAssistantPlaceholder();
+    await streamAssistantReply(session, bubble, {
+      onFailure: () => {
+        session.messages.pop();
+        saveSessions();
+        renderSessionList();
+        return false;
+      },
+    });
+  }
+
+  async function retryUserMessage(messageIndex, content, button) {
+    if (form.querySelector('.send').disabled) {
+      setActionFeedback(button, '生成中');
+      return;
+    }
+
+    const session = getCurrentSession();
+    if (!validateSessionForSend(session)) {
+      return;
+    }
+    const targetMessage = session.messages[messageIndex];
+    if (!targetMessage || targetMessage.role !== 'user') {
+      reuseUserQuery(content, false);
+      return;
+    }
+
+    const originalMessages = session.messages.slice();
+    session.messages = session.messages.slice(0, messageIndex + 1);
+    session.updatedAt = Date.now();
+    saveSessions();
+    renderSessionList();
+    renderMessages(session);
+
+    const bubble = appendAssistantPlaceholder();
+    const succeeded = await streamAssistantReply(session, bubble, {
+      onFailure: () => {
+        session.messages = originalMessages;
+        session.updatedAt = Date.now();
+        saveSessions();
+        renderSessionList();
+        renderMessages(session);
+        setModelStatus('重试失败，已恢复原对话');
+        return true;
+      },
+    });
+
+    if (succeeded) {
+      setActionFeedback(button, '已重试');
+    }
+  }
+
+  function renderMessages(session) {
+    messagesEl.innerHTML = '';
+    if (!session || !session.messages.length) {
+      renderSuggestionTags();
+      return;
+    }
+    hideSuggestionTags();
+    session.messages.forEach((msg, index) => {
+      if (msg.role === 'user') {
+        messagesEl.appendChild(createUserMessageElement(msg.content, index));
+      } else {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg assistant';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        renderAssistantContentToDom(bubble, msg.content);
+        wrap.appendChild(bubble);
+        messagesEl.appendChild(wrap);
+      }
+    });
+  }
+
+  const suggestionTagsEl = document.getElementById('suggestionTags');
+
+  function renderSuggestionTags() {
+    const picked = pickRandom(SAMPLE_PROMPTS, 4);
+    const placeholderPrompt = picked[0];
+    const tagPrompts = picked.slice(1, 4);
+
+    input.placeholder = '例如：' + placeholderPrompt;
+
+    suggestionTagsEl.innerHTML = '';
+    tagPrompts.forEach((prompt) => {
+      const tag = document.createElement('button');
+      tag.type = 'button';
+      tag.className = 'suggestion-tag';
+      tag.textContent = prompt.length > 20 ? prompt.slice(0, 18) + '…' : prompt;
+      tag.title = prompt;
+      tag.addEventListener('click', () => {
+        input.value = prompt;
+        hideSuggestionTags();
+        form.requestSubmit();
+      });
+      suggestionTagsEl.appendChild(tag);
+    });
+    suggestionTagsEl.style.display = '';
+  }
+
+  function hideSuggestionTags() {
+    suggestionTagsEl.innerHTML = '';
+    suggestionTagsEl.style.display = 'none';
+  }
+
+  function findAllShowWidgetFences(text) {
+    const fences = [];
+    let i = 0;
+    while (i < text.length) {
+      const open = text.indexOf('```', i);
+      if (open === -1) break;
+      const afterOpen = text.slice(open + 3);
+      const lineEnd = afterOpen.indexOf('\n');
+      const firstLine = lineEnd === -1 ? afterOpen : afterOpen.slice(0, lineEnd);
+      if (!isShowWidgetFence(firstLine)) {
+        i = open + 3;
+        continue;
+      }
+      const bodyStart = open + 3 + (lineEnd === -1 ? firstLine.length : lineEnd + 1);
+
+      // Try each candidate ``` as the closing fence; pick the first one that yields valid JSON
+      let found = false;
+      let searchFrom = bodyStart;
+      while (searchFrom < text.length) {
+        const close = text.indexOf('```', searchFrom);
+        if (close === -1) break;
+        const body = text.slice(bodyStart, close).trim();
+        const fenceEnd = close + 3;
+        let parsed = null;
+        try {
+          const obj = JSON.parse(body);
+          if (obj && typeof obj.widget_code === 'string') {
+            parsed = { title: obj.title || 'widget', widget_code: obj.widget_code };
+          }
+        } catch (_) {
+          // This ``` is inside the JSON string, try the next one
+          searchFrom = fenceEnd;
+          continue;
+        }
+        fences.push({ start: open, end: fenceEnd, parsed });
+        i = fenceEnd;
+        found = true;
+        break;
+      }
+      if (!found) break;
+    }
+    return fences;
+  }
+
+  function patchIncompleteWidgetFence(text) {
+    // Find the last unclosed show-widget fence
+    const parsed = parseShowWidgetFence(text);
+    const tailStart = parsed.length > 0 ? parsed[parsed.length - 1].end : 0;
+    const tail = text.slice(tailStart);
+    const bt = tail.indexOf('```');
+    if (bt === -1 || !isShowWidgetFence(tail.slice(bt + 3).split('\n')[0])) {
+      return text; // no unclosed fence
+    }
+    const afterFence = tail.slice(bt + 3);
+    const nl = afterFence.indexOf('\n');
+    const partialBody = nl !== -1 ? afterFence.slice(nl + 1) : '';
+    const partialCode = extractPartialWidgetCode(partialBody);
+    if (!partialCode || partialCode.length < 30) {
+      return text; // too little content to salvage
+    }
+    // Build a valid fence to replace the broken one
+    const fenceStart = tailStart + bt;
+    const patchedJson = JSON.stringify({ title: 'widget', widget_code: partialCode });
+    return text.slice(0, fenceStart) + '```show-widget\n' + patchedJson + '\n```';
+  }
+
+  function renderAssistantContentToDom(container, content) {
+    const fences = findAllShowWidgetFences(content);
+    let lastEnd = 0;
+    fences.forEach((f) => {
+      const textBefore = content.slice(lastEnd, f.start);
+      if (textBefore.trim()) {
+        const div = document.createElement('div');
+        div.className = 'stream-text';
+        div.innerHTML = textToHtml(textBefore);
+        container.appendChild(div);
+      }
+      if (f.parsed) {
+        const wrap = document.createElement('div');
+        wrap.className = 'widget-wrap';
+        const iframe = document.createElement('iframe');
+        iframe.sandbox = 'allow-scripts allow-same-origin';
+        iframe.title = f.parsed.title;
+        iframe.srcdoc = buildWidgetDoc(f.parsed.widget_code);
+        wrap.appendChild(iframe);
+        container.appendChild(wrap);
+      } else {
+        const wrap = document.createElement('div');
+        wrap.className = 'widget-wrap widget-placeholder';
+        wrap.innerHTML = '<p class="typing">图表生成失败（模型输出了无效的 JSON）</p>';
+        container.appendChild(wrap);
+      }
+      lastEnd = f.end;
+    });
+    const tail = content.slice(lastEnd);
+    if (tail.trim()) {
+      const div = document.createElement('div');
+      div.className = 'stream-text';
+      div.innerHTML = textToHtml(stripShowWidgetRaw(tail));
+      container.appendChild(div);
+    }
+  }
+
+  function stripShowWidgetRaw(text) {
+    // Strip complete show-widget fences
+    let result = text.replace(/```(?:show-widget|show_widget)[\s\S]*?```/gi, '');
+    // For incomplete (truncated) fences, only strip the fence itself, keep text before it
+    result = result.replace(/```(?:show-widget|show_widget)[\s\S]*/gi, '\n[图表内容被截断]');
+    return result;
+  }
+
+  async function fetchProviders() {
+    const res = await fetch('/api/providers');
+    const data = await res.json().catch(() => ({}));
+    providers = data.providers || [];
+  }
+
+  function fillProviderSelect() {
+    providerSelect.innerHTML = '';
+    if (!providers.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '（请配置 .env 中的 API Key 并重启服务）';
+      opt.disabled = true;
+      providerSelect.appendChild(opt);
+      return;
+    }
+    providers.forEach((p) => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      providerSelect.appendChild(opt);
+    });
+  }
+
+  function fillModelSelect(providerId) {
+    const p = providers.find((x) => x.id === providerId);
+    const models = p?.models || [];
+    modelSelect.innerHTML = '';
+    models.forEach((m) => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      modelSelect.appendChild(opt);
+    });
+    const session = getCurrentSession();
+    if (session && session.provider === providerId && models.includes(session.model)) {
+      modelSelect.value = session.model;
+    } else if (models.length) {
+      modelSelect.value = models[0];
+      if (session && session.provider === providerId) {
+        session.model = models[0];
+        saveSessions();
+      }
+    }
+  }
+
+  function getProviderName(id) {
+    const p = providers.find((x) => x.id === id);
+    return p ? p.name : id || '';
+  }
+
+  function setModelStatus(text) {
+    if (!modelStatusEl) return;
+    modelStatusEl.textContent = text || '';
   }
 
   function escapeHtml(s) {
@@ -17,18 +753,28 @@
     const escaped = escapeHtml(text);
     const parts = [];
     let cursor = 0;
-    const fenceRe = /```(\w*)\n([\s\S]*?)```/g;
+    const fenceRe = /```(\w[\w-]*)\n([\s\S]*?)```/g;
     let m;
     while ((m = fenceRe.exec(escaped)) !== null) {
+      const lang = m[1] || '';
+      const langLower = lang.toLowerCase();
+      if (langLower === 'show-widget' || langLower === 'show_widget') {
+        if (m.index > cursor) {
+          parts.push(inlineMarkdown(escaped.slice(cursor, m.index)));
+        }
+        cursor = m.index + m[0].length;
+        continue;
+      }
       if (m.index > cursor) {
         parts.push(inlineMarkdown(escaped.slice(cursor, m.index)));
       }
-      const lang = m[1] || '';
       parts.push('<pre class="code-block"><code' + (lang ? ' data-lang="' + lang + '"' : '') + '>' + m[2] + '</code></pre>');
       cursor = m.index + m[0].length;
     }
     if (cursor < escaped.length) {
-      parts.push(inlineMarkdown(escaped.slice(cursor)));
+      let tail = escaped.slice(cursor);
+      tail = tail.replace(/```(?:show-widget|show_widget)[\s\S]*/gi, '\n[图表内容被截断]');
+      parts.push(inlineMarkdown(tail));
     }
     return parts.join('');
   }
@@ -162,19 +908,30 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
         continue;
       }
       const bodyStart = open + 3 + (lineEnd === -1 ? firstLine.length : lineEnd + 1);
-      const close = streamText.indexOf('```', bodyStart);
-      if (close === -1) break;
-      const body = streamText.slice(bodyStart, close).trim();
-      const fenceEnd = close + 3;
-      i = fenceEnd;
-      try {
-        const obj = JSON.parse(body);
-        if (obj && typeof obj.widget_code === 'string') {
-          fences.push({ title: obj.title || 'widget', widget_code: obj.widget_code, start: open, end: fenceEnd });
+
+      // Try each candidate ``` as the closing fence; pick the first one that yields valid JSON
+      let found = false;
+      let searchFrom = bodyStart;
+      while (searchFrom < len) {
+        const close = streamText.indexOf('```', searchFrom);
+        if (close === -1) break;
+        const body = streamText.slice(bodyStart, close).trim();
+        const fenceEnd = close + 3;
+        try {
+          const obj = JSON.parse(body);
+          if (obj && typeof obj.widget_code === 'string') {
+            fences.push({ title: obj.title || 'widget', widget_code: obj.widget_code, start: open, end: fenceEnd });
+          }
+        } catch (e) {
+          // This ``` is inside the JSON string, try the next one
+          searchFrom = fenceEnd;
+          continue;
         }
-      } catch (e) {
-        console.warn('[show-widget] JSON parse failed:', e.message, 'body length:', body.length);
+        i = fenceEnd;
+        found = true;
+        break;
       }
+      if (!found) break;
     }
     return fences;
   }
@@ -198,6 +955,13 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
         else if (next === 't') { result += '\t'; pos += 2; }
         else if (next === '/') { result += '/'; pos += 2; }
         else if (next === 'r') { result += '\r'; pos += 2; }
+        else if (next === 'u' && pos + 5 < partialBody.length) {
+          const hex = partialBody.slice(pos + 2, pos + 6);
+          if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+            result += String.fromCharCode(parseInt(hex, 16));
+            pos += 6;
+          } else { result += ch; pos++; }
+        }
         else { result += ch; pos++; }
       } else if (ch === '"') {
         break;
@@ -217,6 +981,10 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
   }
 
   function renderStreamChunk(state, streamText) {
+    // Only remove thinking/typing/searching indicators once we have real visible content
+    if (state.container && streamText.trim().length > 0) {
+      state.container.querySelectorAll('.thinking, .typing, .searching-indicator').forEach((el) => el.remove());
+    }
     const parsed = parseShowWidgetFence(streamText);
 
     while (state.widgetCount < parsed.length) {
@@ -320,84 +1088,105 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
     form.requestSubmit();
   });
 
+  // --- Planner UI helpers ---
+
+  function renderPlannerTasks(container, plan) {
+    container.innerHTML = '';
+    const header = document.createElement('div');
+    header.className = 'planner-header';
+    header.textContent = plan.summary || '生成方案';
+    container.appendChild(header);
+    const list = document.createElement('div');
+    list.className = 'planner-task-list';
+    (plan.tasks || []).forEach((task, i) => {
+      const item = document.createElement('div');
+      item.className = 'planner-task pending';
+      item.setAttribute('data-task-id', task.id);
+      item.innerHTML =
+        '<span class="planner-task-index">' + (i + 1) + '</span>' +
+        '<span class="planner-task-desc">' + escapeHtml(task.description) + '</span>' +
+        '<span class="planner-task-status">等待中</span>';
+      list.appendChild(item);
+    });
+    container.appendChild(list);
+  }
+
+  function updatePlannerTask(container, taskId, status, index, total) {
+    const item = container.querySelector('[data-task-id="' + taskId + '"]');
+    if (!item) return;
+    item.className = 'planner-task ' + status;
+    const statusEl = item.querySelector('.planner-task-status');
+    if (statusEl) {
+      if (status === 'running') statusEl.textContent = '生成中…';
+      else if (status === 'done') statusEl.textContent = '完成';
+      else if (status === 'error') statusEl.textContent = '失败';
+    }
+  }
+
+  function renderSubTaskWidget(container, taskId, widgetCode) {
+    const wrap = document.createElement('div');
+    wrap.className = 'widget-wrap subtask-widget';
+    wrap.setAttribute('data-subtask-id', taskId);
+    const iframe = document.createElement('iframe');
+    iframe.sandbox = 'allow-scripts allow-same-origin';
+    iframe.title = taskId;
+    iframe.srcdoc = buildWidgetDoc(widgetCode);
+    wrap.appendChild(iframe);
+    container.appendChild(wrap);
+  }
+
+  function removeSubTaskWidgets(container) {
+    container.querySelectorAll('.subtask-widget').forEach(el => el.remove());
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const message = input.value.trim();
     if (!message) return;
-    const modules = getModules();
-
-    const userBubble = document.createElement('div');
-    userBubble.className = 'msg user';
-    userBubble.innerHTML = '<div class="bubble">' + escapeHtml(message) + '</div>';
-    messagesEl.appendChild(userBubble);
-
-    const assistantWrap = document.createElement('div');
-    assistantWrap.className = 'msg assistant';
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.innerHTML = '<p class="typing">…</p>';
-    assistantWrap.appendChild(bubble);
-    messagesEl.appendChild(assistantWrap);
-
-    input.value = '';
-    form.querySelector('.send').disabled = true;
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, modules }),
-      });
-      if (!res.ok) {
-        bubble.innerHTML = '<p>请求失败: ' + res.status + '</p>';
-        return;
-      }
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let rawBuffer = '';
-      let streamText = '';
-      bubble.innerHTML = '';
-      const renderState = createRenderState(bubble);
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        rawBuffer += dec.decode(value, { stream: true });
-        const events = rawBuffer.split('\n\n');
-        rawBuffer = events.pop() || '';
-        for (const event of events) {
-          const line = event.split('\n')[0];
-          if (!line || !line.startsWith('data: ')) continue;
-          const payload = line.slice(6);
-          if (payload === '[DONE]') continue;
-          try {
-            const data = JSON.parse(payload);
-            if (data.error) {
-              renderState.activeTextEl.innerHTML = '<p>错误: ' + escapeHtml(data.error) + '</p>';
-              break;
-            }
-            if (data.text) {
-              streamText += data.text;
-              renderStreamChunk(renderState, streamText);
-            }
-          } catch (_) {}
-        }
-      }
-      if (rawBuffer) {
-        const line = rawBuffer.split('\n')[0];
-        if (line.startsWith('data: ') && line.slice(6) !== '[DONE]') {
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.text) streamText += data.text;
-          } catch (_) {}
-        }
-      }
-      renderStreamChunk(renderState, streamText);
-      const hasMarker = streamText.includes('show-widget') || streamText.includes('show_widget');
-      const finalParsed = parseShowWidgetFence(streamText);
-      console.log('[show-widget] 流结束: 响应中含 show-widget 标记 =', hasMarker, ', 解析出 widget 数 =', finalParsed.length, finalParsed.length ? '(应已渲染图表)' : '(若未见图表，多半是模型未输出完整围栏或 JSON 解析失败)');
-    } finally {
-      form.querySelector('.send').disabled = false;
-    }
+    await submitUserMessage(message);
   });
+
+  providerSelect.addEventListener('change', () => {
+    const session = getCurrentSession();
+    if (!session) return;
+    session.provider = providerSelect.value;
+    fillModelSelect(session.provider);
+    session.model = modelSelect.value;
+    saveSessions();
+  });
+
+  modelSelect.addEventListener('change', () => {
+    const session = getCurrentSession();
+    if (!session) return;
+    session.model = modelSelect.value;
+    saveSessions();
+  });
+
+  btnNewChat.addEventListener('click', () => {
+    const newSession = createSession();
+    currentSessionId = newSession.id;
+    renderSessionList();
+    renderMessages(newSession);
+    syncProviderModelFromSession(newSession);
+  });
+
+  (async function init() {
+    await fetchProviders();
+    fillProviderSelect();
+    loadSessions();
+    if (!sessions.length) {
+      createSession();
+    }
+    if (!currentSessionId && sessions.length) {
+      currentSessionId = sessions[0].id;
+    }
+    if (!currentSessionId) {
+      const s = createSession();
+      currentSessionId = s.id;
+    }
+    fillModelSelect(getCurrentSession()?.provider);
+    syncProviderModelFromSession(getCurrentSession());
+    renderSessionList();
+    renderMessages(getCurrentSession());
+  })();
 })();

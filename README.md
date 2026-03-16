@@ -131,6 +131,51 @@ iframe → 父页面:
 
 System prompt 注入层。启用后，模型知道如何输出 widget 格式（` ```show-widget ` 代码围栏 + 合法 HTML/SVG）。包含基于 Anthropic 原版的模块化设计指南（Core / Diagram / Chart / Interactive / Mockup / Art），按需注入，避免 token 浪费。不依赖前端改造，可立刻验证模型输出效果。
 
+### Guidelines 模块与主题映射
+
+Guidelines 不是「几套固定模板」，而是一组可以自由组合的**表达能力基元**，用来让同一个主题从多个视角被「看见」。
+
+当前内置模块：
+
+- **core**：结构化文字说明（概念、规则、方法、分点总结）。
+- **diagram**：关系 / 结构 / 流程图（架构图、时序图、用户旅程图等）。
+- **chart**：数据图表（趋势、对比、分布、占比等）。
+- **interactive**：可交互内容（可点 / 可拖 / 可调参数的 demo、模拟器、小工具）。
+- **mockup**：界面、原型和高保真页面效果。
+- **art**：风格化视觉（插画、海报、情绪板、世界观视觉）。
+
+我们不预设有限的主题类型，而是用一组通用问题，把「任意主题」映射到对应模块组合：
+
+1. **这个主题的核心是什么？**
+   - 概念、规则、方法 → 必选 `core`
+   - 结构 / 流程复杂 → 再加 `diagram`
+   - 指标 / 数字很多 → 再加 `chart`
+2. **它更像「系统」还是「体验」？**
+   - 偏系统设计、架构、流程 → `core + diagram (+ chart)`
+   - 偏产品体验、页面、交互 → `mockup (+ interactive) + core`
+3. **有没有「需要用户亲手操作一下才懂」的部分？**
+   - 有：把这块拆成 `interactive` 模块（参数调节、状态切换、可视化 playground）
+4. **是否需要强烈的风格 / 情绪 / 品牌感？**
+   - 有：加上 `art`，让它可以弱化纯文字比重，用视觉说话。
+
+经验法则：
+
+- 所有主题**至少**会有 `core`，再叠加其它视角。
+- 每个主题可以同时使用 2–4 个模块，让信息更立体。
+- 当遇到一个全新的主题时，只需要重新回答上面四个问题，就能自然映射到一组模块组合；未来新增主题或模块，都不需要改这套规则。
+
+常见主题的示例组合（可按需扩展）：
+
+| 主题示例                     | 推荐模块组合                      |
+|------------------------------|-----------------------------------|
+| 任意技术 / 概念讲解          | core, diagram                     |
+| 任意数据相关主题             | core, chart, diagram              |
+| 任意产品 / 功能设计          | core, mockup, diagram             |
+| 任意交互或算法可视化         | core, diagram, interactive        |
+| 任意品牌 / 世界观 / 设定     | core, art, mockup                 |
+| 任意复杂策略 / 流程优化方案 | core, diagram, chart, interactive |
+| 任意「只想看视觉灵感」主题   | art, mockup, （可选少量 core）    |
+
 ### 产物 B：渲染运行时（M2）
 
 框架无关的 JS 库（`@generative-ui/renderer`）。任何前端引入后就能渲染 widget。核心能力：流式围栏检测、HTML 清理（两阶段）、CSS 变量桥接、双模式渲染器（iframe / morphdom）。封装为 Web Component `<widget-renderer>`。
@@ -148,7 +193,7 @@ System prompt 注入层。启用后，模型知道如何输出 widget 格式（`
 Claude 原生用 `show_widget` tool call，但我们选择代码围栏：
 - 不依赖特定 SDK 的 tool 注册机制
 - 文本流天然支持流式传输（边生成边渲染）
-- 任何能输出 markdown 的模型都能用（Claude, GPT, Kimi, Minimax...）
+- 任何能输出 markdown 的模型都能用（Claude, GPT, Kimi, Zhipu...）
 - 复用现有 markdown 解析管线
 
 ### 为什么支持双渲染模式？
@@ -175,9 +220,9 @@ Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），
 
 | 模型 | 支持情况 | 备注 |
 |------|---------|------|
-| Claude Sonnet 4.6 | ✅ | CodePilot 主力模型 |
+| Claude Sonnet 4.6 | ✅ | 高性价比 Sota 模型 |
+| Openai GPT 5.4 | ✅ | 高性价比 Sota 模型 |
 | Kimi K2.5 | ✅ | 图形质量甚至优于 Sonnet 4.6 |
-| Minimax M2.5 | ✅ | 支持 |
 | Seed 2.0 Pro | 待验证 | 需测试 prompt 遵循度和生成质量 |
 | 其他 markdown 模型 | 理论可行 | 需验证 prompt 遵循度 |
 
@@ -191,6 +236,36 @@ Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），
 - **cdn.jsdelivr.net** — npm 包 CDN
 - **unpkg.com** — npm 包 CDN
 - **esm.sh** — ESM 格式 CDN
+
+---
+
+## 测试
+
+Playground 使用 Node.js 内置测试框架（`node:test` + `node:assert`），零外部依赖。
+
+```bash
+cd playground
+
+# 全部测试
+npm test
+
+# 仅单元测试（parser / search / prompt）
+npm run test:unit
+
+# 仅 E2E + widget 渲染检查
+npm run test:e2e
+```
+
+测试覆盖：
+- **parser** — 围栏检测、partial JSON 提取、HTML 转义、inline markdown
+- **search** — locale 检测（中/英/日/韩 + 国家/语言 hint）
+- **prompt** — system prompt 加载、模块去重、自动 prepend core
+- **e2e** — API 端点校验（providers / chat SSE 流）
+- **widget-render** — example HTML 静态检查（禁止标签、CDN 白名单、CSS 变量）
+
+开发规则：
+- 日常开发 / debug：运行相关模块的单元测试（`npm run test:unit` 或指定文件）
+- 提交代码前：运行 `npm test` 全量回归，确认无交叉影响
 
 ---
 

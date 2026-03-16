@@ -1,0 +1,50 @@
+[
+  {
+    "id": "anthropic-proxy",
+    "name": "LtCraft",
+    "type": "anthropic",
+    "baseUrl": "https://ai.ltcraft.cn:443",
+    "apiKeyEnv": "ANTHROPIC_API_KEY",
+    "models": ["claude-opus-4-6", "claude-sonnet-4-6", "gpt-5.4"]
+  },
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "type": "openai",
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "models": ["gpt-5.4"]
+  },
+  {
+    "id": "kimi",
+    "name": "Kimi (Moonshot)",
+    "type": "openai",
+    "baseUrl": "https://api.moonshot.cn/v1",
+    "apiKeyEnv": "KIMI_API_KEY",
+    "models": ["kimi-k2.5", "kimi-k2-turbo-preview", "moonshot-v1-128k"]
+  },
+  {
+    "id": "kimi-coding",
+    "name": "Kimi Coding",
+    "type": "openai",
+    "baseUrl": "https://api.kimi.com/coding/v1",
+    "apiKeyEnv": "KIMI_CODING_API_KEY",
+    "models": ["kimi-k2.5"]
+  },
+  {
+    "id": "zhipu",
+    "name": "智谱 GLM",
+    "type": "openai",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "apiKeyEnv": "ZHIPU_API_KEY",
+    "models": ["glm-5"]
+  },
+  {
+    "id": "volcengine",
+    "name": "火山引擎",
+    "type": "openai",
+    "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+    "apiKeyEnv": "VOLCENGINE_API_KEY",
+    "models": ["doubao-seed-2-0-pro-260215"]
+  }
+]
