@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   escapeHtml,
   inlineMarkdown,
@@ -10,6 +13,10 @@ import {
   extractPartialWidgetCode,
   textToHtml,
 } from '../public/lib/parser.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const appJsSource = readFileSync(join(__dirname, '..', 'public', 'app.js'), 'utf8');
+const indexHtmlSource = readFileSync(join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
 describe('escapeHtml', () => {
   it('escapes angle brackets', () => {
@@ -322,5 +329,18 @@ describe('textToHtml', () => {
     const result = textToHtml('<script>alert(1)</script>');
     assert.ok(!result.includes('<script>'));
     assert.ok(result.includes('&lt;script&gt;'));
+  });
+});
+
+describe('playground app regression', () => {
+  it('imports the shared parser module from app.js', () => {
+    assert.ok(appJsSource.includes("from './lib/parser.js'"));
+    assert.ok(!appJsSource.includes('function blockMarkdown('));
+    assert.ok(!appJsSource.includes('function textToHtml('));
+    assert.ok(!appJsSource.includes('function parseShowWidgetFence('));
+  });
+
+  it('loads app.js as an ES module', () => {
+    assert.ok(indexHtmlSource.includes('<script type="module" src="app.js"></script>'));
   });
 });
