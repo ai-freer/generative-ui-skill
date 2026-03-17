@@ -345,33 +345,106 @@ renderer.parseAndRender(fullModelOutput);
 | 流式等待感 | 围栏未闭合时只显示占位符 | 流式 DOM 预览：提取部分 widget_code 直接渲染 | ✅ playground 已验证 |
 | 深色填充遮字 | 模型 hardcode 深色 SVG 填充 | iframe 内注入 fixContrast() 自动修正 | ✅ playground 已验证 |
 | SVG class 失效 | 模型用 c-blue/t 等 class 但未注入 CSS | iframe + 预览 div 均注入完整 SVG 预置 class | ✅ playground 已验证 |
-| 滚动回跳 | streaming→final 切换导致高度突变 | 预览→iframe 切换时保持 min-height 平滑过渡 | 待优化 |
-| Script 代码泄露 | 未闭合 `<script>` 标签内容可见 | 流式预览阶段截断未闭合 script | 待实现 |
-| iframe Ready 竞态 | 消息早于 iframe 加载完成 | iframe onLoad 回调兜底 + ready 握手 | 待实现 |
+| 滚动回跳 | streaming→final 切换导致高度突变 | 预览→iframe 切换时保持 min-height 平滑过渡 | ⚠️ 部分解决：streaming 有 min-height+transition，但与 iframe min-height 不一致（120 vs 300），→ M2b 统一处理 |
+| Script 代码泄露 | 未闭合 `<script>` 标签内容可见 | 流式预览阶段截断未闭合 script | ❌ 未解决 → M2a streaming-preview 实现 |
+| iframe Ready 竞态 | 消息早于 iframe 加载完成 | iframe onLoad 回调兜底 + ready 握手 | ❌ 未解决 → M2b iframe-renderer 实现 |
+| 主题同步 | iframe 内无法响应宿主深色/浅色切换 | postMessage `widget:theme` 通知 iframe 重新注入 CSS 变量 | ❌ 未解决 → M2b iframe-renderer 实现 |
 
 ### 实施分期
 
-```
-M2a — 核心提取（从 playground 重构）
-  ├─ stream-parser.ts       从 app.js 提取 + 状态机封装
-  ├─ iframe-renderer.ts     从 app.js 提取 buildWidgetDoc + postMessage
-  ├─ streaming-preview.ts   从 app.js 提取预览逻辑
-  ├─ css-bridge.ts          从 app.js 提取样式常量 + 可配置映射
-  ├─ types.ts               类型定义
-  └─ ✅ 测试：每个模块完成后立即编写单元测试并通过
+#### M2a — 核心提取（从 playground 重构）
 
-M2b — 安全 + 封装
-  ├─ sanitizer.ts           两阶段 HTML 清理（新建）
-  ├─ widget-renderer.ts     Web Component 编排（新建）
-  ├─ morphdom 增强          可选替换 innerHTML
-  └─ ✅ 测试：sanitizer 安全边界测试 + Web Component 集成测试
+**Step 0: 包初始化**
+- 创建 `packages/renderer/` 目录结构
+- `package.json`（name: `@generative-ui/renderer`, type: module, exports 配置）
+- `tsconfig.json`（target: ES2020, module: ESNext, strict, declaration）
+- 构建工具：tsup（零配置打包，输出 ESM + CJS + .d.ts）
+- 测试工具：vitest（兼容 Node.js 内置 test 风格，支持 TypeScript）
 
-M2c — 质量 + 发布
-  ├─ 全量回归测试（npm test 全部通过）
-  ├─ playground 迁移到使用 @generative-ui/renderer
-  ├─ 迁移后回归测试（playground 原有测试全部通过）
-  └─ npm 发布
-```
+**Step 1: types.ts — 类型定义**
+- `WidgetFence`：`{ title, widget_code, start, end }`
+- `ParsedFence`：`{ start, end, parsed: { title, widget_code } | null }`
+- `StreamParserState`：`'TEXT' | 'FENCE_OPEN' | 'WIDGET_CODE' | 'FENCE_CLOSE'`
+- `RendererOptions`：`{ container, theme, cdnWhitelist, cssVarMapping, onSendMessage, onLink }`
+- `WidgetMessage`：`{ type: 'widgetResize' | 'widgetSendMessage' | 'widgetReady' | 'widgetTheme', ... }`
+
+**Step 2: stream-parser.ts — 围栏检测 + partial JSON**
+- 来源：`app.js` parseShowWidgetFence / extractPartialWidgetCode / isShowWidgetFence + `parser.js` 同名函数
+- 重构点：
+  - 封装 `StreamParser` class，维护状态机（TEXT → FENCE_OPEN → WIDGET_CODE → FENCE_CLOSE）
+  - `feed(chunk)` 增量喂入，`getCompletedWidgets()` 返回已闭合围栏
+  - `getPartialWidgetCode()` 返回当前未闭合围栏的部分 widget_code
+  - 同时导出无状态工具函数（parseShowWidgetFence / extractPartialWidgetCode）供非流式场景使用
+- 测试：移植 playground/tests/parser.test.js 中围栏相关用例 + 新增状态机边界测试
+
+**Step 3: css-bridge.ts — CSS 变量桥接 + SVG 预置 class**
+- 来源：`app.js` buildWidgetDoc 中的 svgStyles 字符串 + `style.css` 中 `.widget-streaming .c-*` 规则
+- 输出：
+  - `generateIframeStyles(mapping?)` → 完整 CSS 字符串（:root 变量 + body 样式 + SVG class），注入 iframe
+  - `generateStreamingStyles(scopeClass?)` → 带作用域前缀的 CSS 字符串，注入宿主页面
+  - `DEFAULT_CSS_VAR_MAPPING` — 默认变量映射表
+  - `CDN_WHITELIST` — 默认 CDN 白名单
+- 测试：验证生成的 CSS 包含所有 9 色阶、变量映射正确
+
+**Step 4: iframe-renderer.ts — sandbox iframe 最终渲染**
+- 来源：`app.js` buildWidgetDoc + postMessage listener (widgetResize / widgetSendMessage)
+- 重构点：
+  - `buildWidgetDoc(widgetCode, styles, options?)` — 拼装完整 HTML（CSP + CSS + widget + 通信脚本）
+  - `createWidgetIframe(container, widgetCode, options)` — 创建 sandbox iframe 并挂载
+  - `fixContrast()` + `reportHeight()` 脚本保持不变，内联到 iframe
+  - 高度上限可配置（默认 800px）
+- 测试：验证 CSP 头正确、sandbox 属性正确、buildWidgetDoc 输出结构完整
+
+**Step 5: streaming-preview.ts — 流式 DOM 预览**
+- 来源：`app.js` renderStreamChunk 中 previewEl 逻辑
+- 重构点：
+  - `StreamingPreview` class：`update(partialCode)` / `destroy()` / `getElement()`
+  - **新增**：截断未闭合 `<script>` 标签（解决 Script 代码泄露问题）
+    - `stripUnclosedScript(html)` — 检测最后一个 `<script` 开标签，若无对应 `</script>`，截断该标签及其后内容
+  - 注入 streaming 作用域 CSS（来自 css-bridge）
+- 测试：验证 partialCode 渲染、script 截断、destroy 清理
+
+#### M2b — 安全 + 封装
+
+**Step 6: sanitizer.ts — 两阶段 HTML 清理**
+- 新建模块（参考 CodePilot widget-sanitizer.ts 设计）
+- `sanitizeForStreaming(html)` — 流式阶段：
+  - 剥离：iframe / object / embed / form / meta / link / base
+  - 剥离：所有 on* 事件处理器（正则匹配 `\bon\w+=`）
+  - 剥离：所有 script 标签
+  - 剥离：javascript: / data: URL
+- `sanitizeForIframe(html)` — 终态阶段：
+  - 仅剥离嵌套 iframe / object / embed（防逃逸）
+  - 保留 script 和 event handler（sandbox 内安全执行）
+- 测试：XSS 向量测试集（onerror、javascript:、嵌套 iframe、data: URL 等）
+
+**Step 7: widget-renderer.ts — Web Component 编排**
+- 封装 `<widget-renderer>` 自定义元素
+- 编排三阶段流水线：
+  - TEXT → 纯文本透传
+  - FENCE_OPEN + widget_code 流入 → StreamingPreview（sanitizeForStreaming 后渲染）
+  - FENCE_CLOSE → 销毁 preview，创建 sandbox iframe（sanitizeForIframe 后渲染）
+- 属性：`theme`（auto/light/dark）
+- 方法：`feed(streamText)` / `flush()` / `reset()` / `parseAndRender(fullOutput)`
+- 事件：`widget-ready` / `widget-resize` / `widget-message` / `widget-link`
+- **新增**：`widget:ready` 握手（iframe postMessage ready 信号，解决竞态）
+- **新增**：`widget:theme` 主题同步（监听 prefers-color-scheme 变化，postMessage 通知 iframe）
+- **新增**：预览→iframe 切换时统一 min-height 平滑过渡（解决滚动回跳）
+- 测试：集成测试（feed 流式文本 → 验证 DOM 输出阶段正确）
+
+**Step 8: morphdom 增强（可选）**
+- 可选依赖：`morphdom`
+- 替换 StreamingPreview 中的 innerHTML 为 morphdom diff
+- `onNodeAdded` → fadeIn 动画
+- `onBeforeElUpdated` → 相同节点跳过
+- 测试：对比 innerHTML 和 morphdom 两种模式输出一致性
+
+#### M2c — 质量 + 发布
+
+- 全量回归测试（renderer 包 + playground 原有测试全部通过）
+- playground 迁移到使用 `@generative-ui/renderer`（替换 app.js 中的渲染逻辑）
+- 迁移后回归测试
+- npm 发布
 
 ---
 
