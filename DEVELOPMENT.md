@@ -9,7 +9,7 @@
 ```
 M0 技术分析 + 项目规划               ✅ 完成
 M1 产物 A：Prompt Skill             ✅ 完成
-M2 产物 B：渲染运行时 JS 库          ← 当前
+M2 产物 B：渲染运行时 JS 库          ✅ 核心完成（M2a+M2b+M2c），待 npm 发布
 M3 产物 C：渠道适配层
 ```
 
@@ -441,10 +441,10 @@ renderer.parseAndRender(fullModelOutput);
 
 #### M2c — 质量 + 发布
 
-- 全量回归测试（renderer 包 + playground 原有测试全部通过）
-- playground 迁移到使用 `@generative-ui/renderer`（替换 app.js 中的渲染逻辑）
-- 迁移后回归测试
-- npm 发布
+- ✅ 全量回归测试（renderer 86 tests + playground 152 tests 全部通过）
+- ✅ playground 迁移到使用 `@generative-ui/renderer`（替换 buildWidgetDoc + 新增 sanitization + streaming styles 动态注入）
+- ✅ 迁移后回归测试
+- npm 发布（待 guideline 模块变更完成后执行）
 
 ---
 
