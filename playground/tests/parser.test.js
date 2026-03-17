@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   escapeHtml,
   inlineMarkdown,
+  blockMarkdown,
   isShowWidgetFence,
   parseShowWidgetFence,
   findAllShowWidgetFences,
@@ -34,6 +35,98 @@ describe('inlineMarkdown', () => {
   });
   it('converts newlines to br', () => {
     assert.equal(inlineMarkdown('a\nb'), 'a<br>b');
+  });
+  it('converts italic with asterisk', () => {
+    assert.equal(inlineMarkdown('*italic*'), '<em>italic</em>');
+  });
+  it('converts italic with underscore', () => {
+    assert.equal(inlineMarkdown('_italic_'), '<em>italic</em>');
+  });
+  it('converts links', () => {
+    assert.equal(
+      inlineMarkdown('[click](https://example.com)'),
+      '<a href="https://example.com" target="_blank" rel="noopener">click</a>'
+    );
+  });
+  it('converts strikethrough', () => {
+    assert.equal(inlineMarkdown('~~deleted~~'), '<del>deleted</del>');
+  });
+  it('does not confuse bold with italic', () => {
+    assert.equal(inlineMarkdown('**bold** and *italic*'), '<strong>bold</strong> and <em>italic</em>');
+  });
+});
+
+describe('blockMarkdown', () => {
+  it('converts h1', () => {
+    assert.equal(blockMarkdown('# Title'), '<h1>Title</h1>');
+  });
+  it('converts h2', () => {
+    assert.equal(blockMarkdown('## Section'), '<h2>Section</h2>');
+  });
+  it('converts h3', () => {
+    assert.equal(blockMarkdown('### Subsection'), '<h3>Subsection</h3>');
+  });
+  it('converts h4', () => {
+    assert.equal(blockMarkdown('#### Detail'), '<h4>Detail</h4>');
+  });
+  it('converts unordered list', () => {
+    assert.equal(
+      blockMarkdown('- one<br>- two<br>- three'),
+      '<ul><li>one</li><li>two</li><li>three</li></ul>'
+    );
+  });
+  it('converts unordered list with asterisk', () => {
+    assert.equal(
+      blockMarkdown('* alpha<br>* beta'),
+      '<ul><li>alpha</li><li>beta</li></ul>'
+    );
+  });
+  it('converts ordered list', () => {
+    assert.equal(
+      blockMarkdown('1. first<br>2. second<br>3. third'),
+      '<ol><li>first</li><li>second</li><li>third</li></ol>'
+    );
+  });
+  it('converts blockquote', () => {
+    assert.equal(
+      blockMarkdown('&gt; quoted text'),
+      '<blockquote>quoted text</blockquote>'
+    );
+  });
+  it('merges consecutive blockquote lines', () => {
+    assert.equal(
+      blockMarkdown('&gt; line one<br>&gt; line two'),
+      '<blockquote>line one<br>line two</blockquote>'
+    );
+  });
+  it('converts horizontal rule (---)', () => {
+    assert.ok(blockMarkdown('---').includes('<hr>'));
+  });
+  it('converts horizontal rule (***)', () => {
+    assert.ok(blockMarkdown('***').includes('<hr>'));
+  });
+  it('applies inline formatting inside headings', () => {
+    assert.equal(
+      blockMarkdown('## **Bold** heading'),
+      '<h2><strong>Bold</strong> heading</h2>'
+    );
+  });
+  it('applies inline formatting inside list items', () => {
+    assert.equal(
+      blockMarkdown('- **bold** item<br>- *italic* item'),
+      '<ul><li><strong>bold</strong> item</li><li><em>italic</em> item</li></ul>'
+    );
+  });
+  it('handles mixed blocks', () => {
+    const input = '# Title<br>Some text<br>- item 1<br>- item 2<br>---<br>&gt; quote';
+    const html = blockMarkdown(input);
+    assert.ok(html.includes('<h1>Title</h1>'));
+    assert.ok(html.includes('<ul>'));
+    assert.ok(html.includes('<hr>'));
+    assert.ok(html.includes('<blockquote>'));
+  });
+  it('passes through plain text unchanged', () => {
+    assert.equal(blockMarkdown('hello world'), 'hello world');
   });
 });
 

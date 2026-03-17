@@ -60,7 +60,7 @@ For sequential processes, cause-and-effect, decision trees.
 
 **Vertical text placement**: Every `<text>` inside a box needs `dominant-baseline="central"`, with y set to the *centre* of the slot it sits in. Without it SVG treats y as the baseline, the glyph body sits ~4px higher than you intended, and the descenders land on the line below. Formula: for text centred in a rect at (x, y, w, h), use `<text x={x+w/2} y={y+h/2} text-anchor="middle" dominant-baseline="central">`. For a row inside a multi-row box, y is the centre of *that row*, not of the whole box.
 
-**Layout**: Prefer single-direction flows (all top-down or all left-right). Keep diagrams simple — max 4-5 nodes per diagram. The widget is narrow (~680px) so complex layouts break.
+**Layout**: Prefer single-direction flows (all top-down or all left-right). Keep the main spine to 4-6 nodes. The widget is ~680px wide — complex layouts break if you don't plan coordinates. For richer diagrams, use the annotated flowchart pattern (see below) to add context without cramming more boxes into the spine.
 
 **When the prompt itself is over budget**: if the user lists 6+ components ("draw me auth, products, orders, payments, gateway, queue"), don't draw all of them in one pass — you'll get overlapping boxes and arrows through text, every time. Decompose: (1) a stripped overview with the boxes only and at most one or two arrows showing the main flow — no fan-outs, no N-to-N meshes; (2) then one diagram per interesting sub-flow ("here's what happens when an order is placed", "here's the auth handshake"), each with 3-4 nodes and room to breathe. Count the nouns before you draw. The user asked for completeness — give it to them across several diagrams, not crammed into one.
 
@@ -68,9 +68,7 @@ For sequential processes, cause-and-effect, decision trees.
 
 Build a stepper in the `show-widget` code fence (HTML mode). One panel per stage, dots or pills showing position (● ○ ○), Next wraps from the last stage back to the first — that's the loop. Each panel owns its inputs and products: an event loop's pending callbacks live *inside* the Poll panel, not floating next to a box on a ring. Nothing collides because nothing shares the canvas. Only fall back to a linear SVG (stages in a row, curved `<path>` return arrow) when there's one input and one output total and no per-stage detail to show.
 
-**Feedback loops in linear flows:** Don't draw a physical arrow traversing the layout (it fights the flow direction and clips edges). Instead:
-- Small `↻` glyph + text near the cycle point: `<text>↻ returns to start</text>`
-- Or restructure the whole diagram as a circle if the cycle IS the point
+**Feedback loops in linear flows:** Use the return path technique from the annotated flowchart pattern — a dashed `<path>` routed along the right margin, outside the main spine, with `class="leader"` and `marker-end="url(#arrow)"`. Add a vertical label if the loop has a name. For simple cases, a small `↻` glyph + text near the cycle point also works: `<text>↻ returns to start</text>`.
 
 **Arrows:** A line from A to B must not cross any other box or label. If the direct path crosses something, route around with an L-bend: `<path d="M x1 y1 L x1 ymid L x2 ymid L x2 y2"/>`. Place arrow labels in clear space, not on the midpoint.
 
@@ -103,6 +101,75 @@ Keep all nodes the same height when they have the same content type (e.g. all si
 *Neutral node* (gray, for start/end/generic steps): use `class="box"` for auto-themed fill/stroke, and default text classes.
 
 Make all nodes clickable by default — wrap in `<g class="node" onclick="window.__widgetSendMessage('...')">`. The hover effect is built in.
+
+#### Annotated flowchart
+
+When a process has a main spine AND external factors that influence specific steps (strategies, policies, constraints, feedback loops), use the annotated flowchart pattern instead of cramming everything into the spine.
+
+**Structure**: A vertical main flow in the center (~x=200..480), with lightweight annotation nodes on the left and right margins connected by dashed leader lines.
+
+**Main spine** — standard two-line nodes (`c-{ramp}`, 56px tall), each step a different color ramp to visually separate stages. Vertical spacing 70-80px between nodes. Center the spine at x≈340.
+
+**Annotation nodes** — smaller, lighter badges that label external influences:
+```svg
+<!-- Annotation pill: smaller rect, muted color, thinner stroke -->
+<g class="node c-gray" onclick="window.__widgetSendMessage('Explain strategy 1')">
+  <rect x="20" y="85" width="120" height="36" rx="18" stroke-width="0.5"/>
+  <text class="ts" x="80" y="103" text-anchor="middle" dominant-baseline="central">Strategy 1</text>
+</g>
+```
+- Use `rx` = half height for pill shape (rx=18 for 36px tall)
+- Use `c-gray` or a single muted ramp for all annotations — they should recede behind the main flow
+- Keep annotation labels to 2-3 words max
+- Place left-side annotations at x=20..140, right-side at x=540..660
+
+**Leader lines** — dashed lines connecting annotations to their target step:
+```svg
+<!-- Dashed leader from annotation to main node -->
+<line x1="140" y1="103" x2="230" y2="103" class="leader"/>
+<!-- Or with a dot endpoint for softer connection -->
+<circle cx="140" cy="103" r="3" fill="var(--t)" opacity="0.3"/>
+<line x1="143" y1="103" x2="230" y2="103" class="leader"/>
+```
+- Use `class="leader"` (dashed, 0.5px, tertiary color) — never solid arrows
+- Leader lines connect horizontally from annotation edge to main node edge
+- If the annotation is vertically offset from its target, use an L-bend: horizontal then vertical
+
+**Feedback loops** — when the last step feeds back to an earlier step, draw a visible return path on the right margin:
+```svg
+<!-- Return path: vertical line on right margin + curved corners -->
+<path d="M480,380 L560,380 L560,120 L480,120" fill="none" class="leader" marker-end="url(#arrow)"/>
+<!-- Optional: label the loop -->
+<text class="ts" x="572" y="250" dominant-baseline="central" writing-mode="vertical-rl">Feedback loop</text>
+```
+- Route the return path outside the main flow (right margin, x=540-580)
+- Use dashed style (`class="leader"`) to distinguish from the main flow arrows
+- Add a short vertical label if the loop has a name
+
+**Color strategy for annotated flowcharts**: Use 3-4 distinct ramps for the main spine nodes (one per semantic group), and `c-gray` for all annotations. This creates clear visual hierarchy — the eye follows the colorful spine, annotations are discoverable but don't compete.
+
+**Example layout** (6-step process with 4 annotations):
+```
+         [Annotation A]---→ ┌──────────────┐
+              (gray pill)    │   Step 1      │ c-blue
+                             │   subtitle    │
+                             └──────┬───────┘
+                                    │
+                             ┌──────┴───────┐
+         [Annotation B]---→ │   Step 2      │ c-purple
+              (gray pill)    │   subtitle    │
+                             └──────┬───────┘
+                                    │              ↑
+                             ┌──────┴───────┐      │
+                             │   Step 3      │ c-teal  │ return
+                             │   subtitle    │      │ path
+                             └──────┬───────┘      │
+                                    │              │
+                             ┌──────┴───────┐      │
+                             │   Step 4      │ c-amber ─┘
+                             │   subtitle    │ →[Annotation C]
+                             └──────────────┘    (gray pill)
+```
 
 #### Structural diagram
 

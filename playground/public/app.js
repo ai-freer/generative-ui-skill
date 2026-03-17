@@ -35,8 +35,18 @@
   let currentSessionId = null;
   let providers = [];
 
-  function getModules() {
-    return Array.from(document.querySelectorAll('.modules input[name=mod]:checked')).map((el) => el.value);
+  // Per-session streaming state: sessionId -> { fragment, streaming }
+  // fragment: DocumentFragment holding the live DOM while session is in background
+  const activeStreams = new Map();
+
+  function updateModulePills(activeModules) {
+    document.querySelectorAll('.mod-pill').forEach((el) => {
+      el.classList.toggle('active', activeModules.includes(el.dataset.mod));
+    });
+  }
+
+  function resetModulePills() {
+    document.querySelectorAll('.mod-pill').forEach((el) => el.classList.remove('active'));
   }
 
   function getSearchEnabled() {
@@ -78,12 +88,35 @@
   }
 
   function switchSession(id) {
+    if (id === currentSessionId) return;
+
+    // Detach current session's live DOM if it's streaming
+    if (currentSessionId && activeStreams.has(currentSessionId)) {
+      const fragment = document.createDocumentFragment();
+      while (messagesEl.firstChild) {
+        fragment.appendChild(messagesEl.firstChild);
+      }
+      activeStreams.get(currentSessionId).fragment = fragment;
+    }
+
     currentSessionId = id;
     const session = getCurrentSession();
-    if (session) {
+
+    // Restore live DOM if target session is streaming, otherwise re-render
+    if (session && activeStreams.has(id)) {
+      messagesEl.innerHTML = '';
+      const { fragment } = activeStreams.get(id);
+      if (fragment) {
+        messagesEl.appendChild(fragment);
+        activeStreams.get(id).fragment = null;
+      }
+    } else if (session) {
       renderMessages(session);
-      syncProviderModelFromSession(session);
     }
+
+    syncProviderModelFromSession(session);
+    updateSendButton();
+    resetModulePills();
     renderSessionList();
   }
 
@@ -92,14 +125,12 @@
     sessions = sessions.filter((s) => s.id !== id);
     saveSessions();
     if (currentSessionId === id) {
-      currentSessionId = sessions.length ? sessions[0].id : null;
-      if (currentSessionId) switchSession(currentSessionId);
-      else {
+      currentSessionId = null;
+      if (sessions.length) {
+        switchSession(sessions[0].id);
+      } else {
         const newSession = createSession();
-        currentSessionId = newSession.id;
-        renderSessionList();
-        renderMessages(newSession);
-        syncProviderModelFromSession(newSession);
+        switchSession(newSession.id);
       }
     } else {
       renderSessionList();
@@ -108,10 +139,11 @@
 
   function renderSessionList() {
     sessionListEl.innerHTML = '';
-    sessions.forEach((s) => {
+    const sorted = [...sessions].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt));
+    sorted.forEach((s) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'session-item' + (s.id === currentSessionId ? ' active' : '');
+      btn.className = 'session-item' + (s.id === currentSessionId ? ' active' : '') + (activeStreams.has(s.id) ? ' streaming' : '');
       btn.setAttribute('data-session-id', s.id);
       const titleSpan = document.createElement('span');
       titleSpan.className = 'session-title';
@@ -140,7 +172,7 @@
     input.value = content;
     input.focus();
     if (!shouldSubmit) return;
-    if (form.querySelector('.send').disabled) return;
+    if (activeStreams.has(currentSessionId)) return;
     form.requestSubmit();
   }
 
@@ -233,11 +265,19 @@
     if (!session) {
       return false;
     }
+    if (activeStreams.has(session.id)) {
+      return false;
+    }
     if (!session.provider || !session.model) {
       alert('请先在右侧选择 Provider 和 Model');
       return false;
     }
     return true;
+  }
+
+  function updateSendButton() {
+    const isCurrentStreaming = currentSessionId && activeStreams.has(currentSessionId);
+    form.querySelector('.send').disabled = !!isCurrentStreaming;
   }
 
   function appendAssistantPlaceholder() {
@@ -255,9 +295,12 @@
 
   async function streamAssistantReply(session, bubble, options) {
     const onFailure = options?.onFailure;
-    form.querySelector('.send').disabled = true;
+    activeStreams.set(session.id, { fragment: null });
+    updateSendButton();
+    // Only update status bar if this session is currently visible
+    const setStatus = (text) => { if (session.id === currentSessionId) setModelStatus(text); };
     const providerName = getProviderName(session.provider);
-    setModelStatus(`正在调用 ${providerName || 'Provider'} · ${session.model}…`);
+    setStatus(`正在调用 ${providerName || 'Provider'} · ${session.model}…`);
 
     const apiMessages = session.messages.map((m) => ({ role: m.role, content: m.content }));
 
@@ -269,7 +312,6 @@
           provider: session.provider,
           model: session.model,
           messages: apiMessages,
-          modules: getModules(),
           searchEnabled: getSearchEnabled(),
         }),
       });
@@ -278,7 +320,7 @@
         const handled = await onFailure?.({ status: res.status, errorText: errText });
         if (!handled) {
           bubble.innerHTML = '<p>请求失败: ' + res.status + ' ' + escapeHtml(errText.slice(0, 200)) + '</p>';
-          setModelStatus('调用失败，请稍后重试');
+          setStatus('调用失败，请稍后重试');
         }
         return false;
       }
@@ -299,9 +341,23 @@
         const events = rawBuffer.split('\n\n');
         rawBuffer = events.pop() || '';
         for (const event of events) {
-          const line = event.split('\n')[0];
-          if (!line || !line.startsWith('data: ')) continue;
-          const payload = line.slice(6);
+          // Parse named SSE events (e.g. "event: modules\ndata: [...]")
+          const lines = event.split('\n');
+          let eventType = '';
+          let dataLine = '';
+          for (const l of lines) {
+            if (l.startsWith('event: ')) eventType = l.slice(7).trim();
+            if (l.startsWith('data: ')) dataLine = l.slice(6);
+          }
+          if (!dataLine) continue;
+
+          // Handle named events
+          if (eventType === 'modules') {
+            try { updateModulePills(JSON.parse(dataLine)); } catch (_) {}
+            continue;
+          }
+
+          const payload = dataLine;
           if (payload === '[DONE]') continue;
           try {
             const data = JSON.parse(payload);
@@ -310,7 +366,7 @@
               break;
             }
             if (data.searching) {
-              setModelStatus(`正在搜索: ${data.searching}`);
+              setStatus(`正在搜索: ${data.searching}`);
               let searchingEl = bubble.querySelector('.searching-indicator');
               if (!searchingEl) {
                 searchingEl = document.createElement('p');
@@ -326,15 +382,15 @@
             // --- Planner events ---
             if (data.stream_status) {
               if (data.stream_status === 'truncated') {
-                setModelStatus('检测到内容截断，准备重试…');
+                setStatus('检测到内容截断，准备重试…');
               }
             }
             if (data.retrying) {
-              setModelStatus('正在重试生成…');
+              setStatus('正在重试生成…');
             }
             if (data.retry_success && data.content) {
               // Retry succeeded — replace the truncated content with complete version
-              setModelStatus('重试成功，正在渲染…');
+              setStatus('重试成功，正在渲染…');
               streamText = data.content;
               // Reset render state and re-render from scratch
               bubble.innerHTML = '';
@@ -348,7 +404,7 @@
             }
             if (data.planning) {
               plannerActive = true;
-              setModelStatus('正在规划生成方案…');
+              setStatus('正在规划生成方案…');
               // Remove streaming preview / placeholder
               if (renderState.previewEl) { renderState.previewEl.remove(); renderState.previewEl = null; }
               if (renderState.placeholderEl) { renderState.placeholderEl.remove(); renderState.placeholderEl = null; }
@@ -359,11 +415,11 @@
             }
             if (data.plan && plannerEl) {
               renderPlannerTasks(plannerEl, data.plan);
-              setModelStatus(`规划完成，共 ${data.plan.tasks.length} 个子任务`);
+              setStatus(`规划完成，共 ${data.plan.tasks.length} 个子任务`);
             }
             if (data.subtask_start && plannerEl) {
               updatePlannerTask(plannerEl, data.subtask_start.id, 'running', data.subtask_start.index, data.subtask_start.total);
-              setModelStatus(`正在生成 (${(data.subtask_start.index || 0) + 1}/${data.subtask_start.total || '?'}) ${data.subtask_start.description}`);
+              setStatus(`正在生成 (${(data.subtask_start.index || 0) + 1}/${data.subtask_start.total || '?'}) ${data.subtask_start.description}`);
             }
             if (data.subtask_done && plannerEl) {
               updatePlannerTask(plannerEl, data.subtask_done.id, data.subtask_done.widget_code ? 'done' : 'error');
@@ -372,7 +428,7 @@
               }
             }
             if (data.assembling) {
-              setModelStatus('正在组装最终结果…');
+              setStatus('正在组装最终结果…');
               if (plannerEl) {
                 const assembleNote = document.createElement('p');
                 assembleNote.className = 'thinking';
@@ -396,19 +452,19 @@
               } else {
                 bubble.appendChild(wrap);
               }
-              setModelStatus('');
+              setStatus('');
             }
             if (data.planner_content) {
               plannerContent = data.planner_content;
             }
             if (data.planning_failed) {
-              setModelStatus('规划失败: ' + data.planning_failed);
+              setStatus('规划失败: ' + data.planning_failed);
               if (plannerEl) {
                 plannerEl.innerHTML = '<p>规划失败: ' + escapeHtml(data.planning_failed) + '</p>';
               }
             }
             if (data.planner_error) {
-              setModelStatus('规划出错: ' + data.planner_error);
+              setStatus('规划出错: ' + data.planner_error);
             }
           } catch (_) {}
         }
@@ -434,19 +490,21 @@
       session.messages.push({ role: 'assistant', content: contentToSave });
       saveSessions();
       renderSessionList();
-      setModelStatus('');
+      setStatus('');
       return true;
     } catch (err) {
       const errText = err?.message || String(err);
       const handled = await onFailure?.({ errorText: errText });
       if (!handled) {
         bubble.innerHTML = '<p>请求失败: ' + escapeHtml(errText.slice(0, 200)) + '</p>';
-        setModelStatus('调用失败，请稍后重试');
+        setStatus('调用失败，请稍后重试');
       }
       return false;
     } finally {
-      form.querySelector('.send').disabled = false;
-      if (!modelStatusEl.textContent) {
+      activeStreams.delete(session.id);
+      updateSendButton();
+      renderSessionList();
+      if (session.id === currentSessionId && !modelStatusEl.textContent) {
         setModelStatus('');
       }
     }
@@ -483,7 +541,7 @@
   }
 
   async function retryUserMessage(messageIndex, content, button) {
-    if (form.querySelector('.send').disabled) {
+    if (activeStreams.has(currentSessionId)) {
       setActionFeedback(button, '生成中');
       return;
     }
@@ -760,13 +818,13 @@
       const langLower = lang.toLowerCase();
       if (langLower === 'show-widget' || langLower === 'show_widget') {
         if (m.index > cursor) {
-          parts.push(inlineMarkdown(escaped.slice(cursor, m.index)));
+          parts.push(blockMarkdown(escaped.slice(cursor, m.index)));
         }
         cursor = m.index + m[0].length;
         continue;
       }
       if (m.index > cursor) {
-        parts.push(inlineMarkdown(escaped.slice(cursor, m.index)));
+        parts.push(blockMarkdown(escaped.slice(cursor, m.index)));
       }
       parts.push('<pre class="code-block"><code' + (lang ? ' data-lang="' + lang + '"' : '') + '>' + m[2] + '</code></pre>');
       cursor = m.index + m[0].length;
@@ -774,7 +832,7 @@
     if (cursor < escaped.length) {
       let tail = escaped.slice(cursor);
       tail = tail.replace(/```(?:show-widget|show_widget)[\s\S]*/gi, '\n[图表内容被截断]');
-      parts.push(inlineMarkdown(tail));
+      parts.push(blockMarkdown(tail));
     }
     return parts.join('');
   }
@@ -782,8 +840,82 @@
   function inlineMarkdown(s) {
     return s
       .replace(/\n/g, '<br>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/~~(.+?)~~/g, '<del>$1</del>')
+      .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+      .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<em>$1</em>')
       .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+
+  function inlineFmt(s) {
+    return s
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/~~(.+?)~~/g, '<del>$1</del>')
+      .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+      .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+
+  function blockMarkdown(text) {
+    var lines = text.split('<br>');
+    var out = [];
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      var headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        var level = headingMatch[1].length;
+        out.push('<h' + level + '>' + inlineFmt(headingMatch[2]) + '</h' + level + '>');
+        i++;
+        continue;
+      }
+      if (/^(?:---+|\*\*\*+)$/.test(line.trim())) {
+        out.push('<hr>');
+        i++;
+        continue;
+      }
+      var ulMatch = line.match(/^[\s]*[-*]\s+(.+)$/);
+      if (ulMatch) {
+        var items = [];
+        while (i < lines.length) {
+          var um = lines[i].match(/^[\s]*[-*]\s+(.+)$/);
+          if (!um) break;
+          items.push('<li>' + inlineFmt(um[1]) + '</li>');
+          i++;
+        }
+        out.push('<ul>' + items.join('') + '</ul>');
+        continue;
+      }
+      var olMatch = line.match(/^[\s]*\d+[.)]\s+(.+)$/);
+      if (olMatch) {
+        var olItems = [];
+        while (i < lines.length) {
+          var om = lines[i].match(/^[\s]*\d+[.)]\s+(.+)$/);
+          if (!om) break;
+          olItems.push('<li>' + inlineFmt(om[1]) + '</li>');
+          i++;
+        }
+        out.push('<ol>' + olItems.join('') + '</ol>');
+        continue;
+      }
+      var bqMatch = line.match(/^&gt;\s?(.*)$/);
+      if (bqMatch) {
+        var bqLines = [];
+        while (i < lines.length) {
+          var bm = lines[i].match(/^&gt;\s?(.*)$/);
+          if (!bm) break;
+          bqLines.push(inlineFmt(bm[1]));
+          i++;
+        }
+        out.push('<blockquote>' + bqLines.join('<br>') + '</blockquote>');
+        continue;
+      }
+      out.push(inlineFmt(line));
+      i++;
+    }
+    return out.join('\n');
   }
 
   const CDN_ORIGINS = [
@@ -1164,10 +1296,7 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
 
   btnNewChat.addEventListener('click', () => {
     const newSession = createSession();
-    currentSessionId = newSession.id;
-    renderSessionList();
-    renderMessages(newSession);
-    syncProviderModelFromSession(newSession);
+    switchSession(newSession.id);
   });
 
   (async function init() {

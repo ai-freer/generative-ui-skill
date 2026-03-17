@@ -32,6 +32,7 @@ body {
   color: var(--text);
   background: var(--bg);
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -53,6 +54,7 @@ body {
   flex: 1;
   display: flex;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -124,6 +126,18 @@ body {
   background: var(--accent-bg);
   color: var(--accent);
   font-weight: 500;
+}
+
+.session-item.streaming .session-title::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.8s ease-in-out infinite;
+  vertical-align: middle;
 }
 
 .session-item .session-title {
@@ -202,13 +216,26 @@ body {
   padding: 0;
   margin: 0;
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
-.modules label {
-  font-size: 0.875rem;
-  cursor: pointer;
+.mod-pill {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+}
+
+.mod-pill.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
 }
 
 .main {
@@ -226,6 +253,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding-bottom: 1rem;
+  padding-right: 0.75rem;
 }
 
 .msg {
@@ -328,6 +356,65 @@ body {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
+.msg.assistant .bubble h1,
+.msg.assistant .bubble h2,
+.msg.assistant .bubble h3,
+.msg.assistant .bubble h4,
+.stream-text h1,
+.stream-text h2,
+.stream-text h3,
+.stream-text h4 {
+  margin: 1rem 0 0.5rem 0;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.msg.assistant .bubble h1, .stream-text h1 { font-size: 1.4em; }
+.msg.assistant .bubble h2, .stream-text h2 { font-size: 1.2em; }
+.msg.assistant .bubble h3, .stream-text h3 { font-size: 1.05em; }
+.msg.assistant .bubble h4, .stream-text h4 { font-size: 1em; color: var(--text-secondary); }
+
+.msg.assistant .bubble ul,
+.msg.assistant .bubble ol,
+.stream-text ul,
+.stream-text ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.msg.assistant .bubble li,
+.stream-text li {
+  margin: 0.25rem 0;
+  line-height: 1.5;
+}
+
+.msg.assistant .bubble blockquote,
+.stream-text blockquote {
+  margin: 0.5rem 0;
+  padding: 0.4rem 0.8rem;
+  border-left: 3px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.msg.assistant .bubble hr,
+.stream-text hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.75rem 0;
+}
+
+.msg.assistant .bubble a,
+.stream-text a {
+  color: var(--accent, #6366f1);
+  text-decoration: none;
+}
+
+.msg.assistant .bubble a:hover,
+.stream-text a:hover {
+  text-decoration: underline;
+}
+
 .msg.assistant .bubble .code-block {
   margin: 0.75rem 0;
   padding: 0.75rem 1rem;
@@ -394,27 +481,18 @@ body {
 
 .widget-wrap {
   margin: 1rem 0;
-  border: 2px solid var(--accent);
+  border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
   background: var(--bg-secondary);
   transition: height 0.2s ease;
 }
 
-.widget-wrap:not(.widget-placeholder)::before {
-  content: '图表';
-  display: block;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  padding: 4px 8px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-}
-
 .widget-wrap iframe {
   display: block;
   width: 100%;
   min-height: 300px;
+  max-height: 70vh;
   border: none;
   background: #fff;
 }

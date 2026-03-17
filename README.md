@@ -21,198 +21,132 @@
 
 ---
 
-## 技术架构
+## 核心架构
 
-### Claude 原生方案
-
-通过逆向工程（来源：[pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)）揭示的 Claude.ai 原生实现：
-
-**触发方式：`show_widget` tool call**
-
-模型调用 `show_widget` 工具，传入结构化 JSON（非 markdown 文本流）：
-
-```json
-{
-  "i_have_seen_read_me": true,
-  "title": "snake_case_identifier",
-  "loading_messages": ["Generating chart...", "Almost ready..."],
-  "widget_code": "<style>...</style>\n<div>...</div>\n<script>...</script>"
-}
-```
-
-**渐进式文档加载：`read_me` 工具**
-
-模型在首次调用 `show_widget` 前，必须先调用 `read_me` 工具按需加载设计指南：
-
-| 模块 | 内容 | 大小 |
-|------|------|------|
-| diagram | Core + Color Palette + SVG Setup + Diagram Types | ~59KB |
-| chart | Core + UI Components + Color Palette + Chart.js | ~22KB |
-| interactive | Core + UI Components + Color Palette | ~19KB |
-| mockup | Core + UI Components + Color Palette | ~19KB |
-| art | Core + SVG Setup + Art/Illustration | ~17KB |
-
-共享部分自动去重（如 Core Design System 只注入一次）。这是渐进式信息披露应用于模型自身指令的范例 —— 基础 system prompt 保持精简，专业知识按需加载。
-
-**流式渲染：morphdom DOM diffing**
-
-Claude.ai 的 widget 不使用 iframe，而是直接注入父页面 DOM：
+整个方案分为三层：**Prompt Skill → 渲染运行时 → 渠道适配层**，逐层解耦。
 
 ```
-LLM 开始生成 show_widget tool call
-  → widget_code 参数逐 token 流式输出（streaming partial JSON）
-  → 客户端增量解析 partial JSON，提取已到达的 HTML
-  → morphdom 对比新旧 DOM 树，仅更新变化的节点
-  → 新增节点播放 fadeIn 动画，相同节点保持不动
-  → 流式完成后，clone script 标签使其执行
+┌─────────────────────────────────────────────────────────┐
+│                    任意 LLM 模型                         │
+│          （Claude / GPT / Kimi / Seed / ...）            │
+└────────────────────────┬────────────────────────────────┘
+                         │  注入 System Prompt + Guidelines
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│              ① Prompt Skill（M1）                        │
+│                                                         │
+│  模型学会用 ```show-widget 代码围栏输出 HTML/SVG widget  │
+│  模块化设计指南按需加载（diagram / chart / art / ...）    │
+└────────────────────────┬────────────────────────────────┘
+                         │  模型输出包含 show-widget 围栏的文本流
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│              ② 渲染运行时（M2）                          │
+│              @generative-ui/renderer                     │
+│                                                         │
+│  流式围栏检测 → HTML 清理 → CSS 变量桥接 → 渲染          │
+│  三阶段流水线：流式 DOM 预览 → sandbox iframe → 交互桥接  │
+└────────────────────────┬────────────────────────────────┘
+                         │  标准化的 widget 渲染能力
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│              ③ 渠道适配层（M3）                           │
+│                                                         │
+│  按渠道能力选择渲染策略：                                 │
+│  Web / App → 满血渲染（完整流水线）                       │
+│  飞书 / Telegram / 微信 → 图片 + 按钮 / 富文本卡片 / H5  │
+└─────────────────────────────────────────────────────────┘
 ```
 
-安全边界通过 CSP 策略实现，限制 `script src` 只能从 4 个 CDN 白名单加载。
+核心设计选择：
 
-**Widgets vs Artifacts**
-
-| 维度 | Widgets（show_widget） | Artifacts |
-|------|----------------------|-----------|
-| 定位 | 对话内嵌增强 | 可交付物 |
-| 展示 | 内联在聊天中，透明背景 | 侧边栏，可下载 |
-| 库支持 | 任意 CDN 白名单内的库，运行时下载 | 固定预置库集合 |
-| 生命周期 | 临时，绑定到消息 | 持久化，跨会话 |
-
-### CodePilot 方案
-
-CodePilot 采用了不同的技术路线：
-
-**触发方式：代码围栏（文本流）**
-
-模型在 markdown 输出中使用 ` ```show-widget ` 围栏包裹 widget 代码，不依赖 tool_use 机制。
-
-**渲染方式：sandbox iframe + CSP**
-
-使用 sandbox iframe 实现完全隔离的执行环境，通过 postMessage 实现父子通信。
-
-**三层安全防护：**
-
-1. **流式清理**（sanitizeForStreaming）—— 剥离 iframe/object/embed/form/meta/link/base、所有 on* 事件处理器、所有 script 标签、javascript:/data: URL
-2. **终态清理**（sanitizeForIframe）—— 仅剥离嵌套/逃逸标签，保留 script 和 event handler（在 sandbox 内安全执行）
-3. **iframe sandbox** —— `sandbox="allow-scripts"`（无 allow-same-origin/allow-top-navigation/allow-popups），CSP 限制 CDN 白名单，`connect-src 'none'` 禁止 fetch/XHR/WebSocket
-
-**iframe 通信协议：**
-
-```
-父页面 → iframe:
-  widget:update    { html }           流式预览（无脚本）
-  widget:finalize  { html }           完整渲染（执行脚本）
-  widget:theme     { vars, isDark }   主题同步
-
-iframe → 父页面:
-  widget:ready     {}                 iframe 就绪
-  widget:resize    { height }         高度变化
-  widget:link      { href }           链接点击
-  widget:sendMessage { text }         widget 内按钮触发追问
-```
-
-### 方案对比
-
-| 维度 | Claude.ai 原生 | CodePilot | 本项目方案 |
-|------|---------------|-----------|-----------|
-| 触发 | `show_widget` tool call | ` ```show-widget ` 代码围栏 | 代码围栏（兼容任何 markdown 模型） |
-| 流式渲染 | morphdom DOM diffing，直接注入父 DOM | HTML 流 → sanitize → postMessage → iframe | 支持双模式：morphdom（性能）/ iframe（安全） |
-| 隔离 | CSP 限制 CDN 白名单 | sandbox iframe + CSP | 按场景选择隔离级别 |
-| 文档加载 | `read_me` 渐进加载 5 模块 | 静态注入简化版 prompt | 渐进加载（基于 Anthropic 原版指南） |
-| 模型依赖 | 仅限 Claude | 任何 markdown 模型 | 任何 markdown 模型 |
+- **代码围栏而非 tool_use** —— 不依赖特定 SDK，任何能输出 markdown 的模型都能驱动
+- **三阶段渲染流水线** —— 流式预览（边生成边看）→ sandbox iframe（安全执行）→ 交互桥接（drill-down 追问）
+- **模块化设计指南** —— 基于 Anthropic 原版提取适配，按场景按需加载，避免 token 浪费
 
 ---
 
-## 产物概览
+## 核心产出
 
-本项目分三个产物递进交付：
+### Prompt Skill
 
-### 产物 A：Prompt Skill（M1）
+System prompt 注入层，是整个方案的基础。启用后，模型知道如何用 ` ```show-widget ` 代码围栏输出合法的 HTML/SVG widget。
 
-System prompt 注入层。启用后，模型知道如何输出 widget 格式（` ```show-widget ` 代码围栏 + 合法 HTML/SVG）。包含基于 Anthropic 原版的模块化设计指南（Core / Diagram / Chart / Interactive / Mockup / Art），按需注入，避免 token 浪费。不依赖前端改造，可立刻验证模型输出效果。
+内置 6 个设计指南模块，可自由组合：
 
-### Guidelines 模块与主题映射
+| 模块 | 适用场景 |
+|------|---------|
+| **core** | 结构化文字说明（概念、规则、方法、分点总结） |
+| **diagram** | 关系 / 结构 / 流程图（架构图、时序图、用户旅程图等） |
+| **chart** | 数据图表（趋势、对比、分布、占比等） |
+| **interactive** | 可交互内容（可点 / 可拖 / 可调参数的 demo、模拟器、小工具） |
+| **mockup** | 界面、原型和高保真页面效果 |
+| **art** | 风格化视觉（插画、海报、情绪板、世界观视觉） |
 
-Guidelines 不是「几套固定模板」，而是一组可以自由组合的**表达能力基元**，用来让同一个主题从多个视角被「看见」。
+所有主题至少会有 `core`，再叠加其它视角。每个主题可以同时使用 2–4 个模块，让信息更立体。
 
-当前内置模块：
+### 渲染运行时
 
-- **core**：结构化文字说明（概念、规则、方法、分点总结）。
-- **diagram**：关系 / 结构 / 流程图（架构图、时序图、用户旅程图等）。
-- **chart**：数据图表（趋势、对比、分布、占比等）。
-- **interactive**：可交互内容（可点 / 可拖 / 可调参数的 demo、模拟器、小工具）。
-- **mockup**：界面、原型和高保真页面效果。
-- **art**：风格化视觉（插画、海报、情绪板、世界观视觉）。
+框架无关的 JS 库 `@generative-ui/renderer`（M2 开发中）。任何前端引入后就能渲染 show-widget 围栏内的 HTML/SVG。核心能力：
 
-我们不预设有限的主题类型，而是用一组通用问题，把「任意主题」映射到对应模块组合：
+- 流式围栏检测 + partial JSON 提取
+- 两阶段 HTML 清理（流式阶段剥离危险标签，终态阶段保留脚本在 sandbox 内执行）
+- CSS 变量桥接（模型写标准变量名，桥接层映射到宿主实际变量）
+- 双模式渲染器（iframe 隔离模式 / morphdom 性能模式）
+- 封装为 Web Component `<widget-renderer>`
 
-1. **这个主题的核心是什么？**
-   - 概念、规则、方法 → 必选 `core`
-   - 结构 / 流程复杂 → 再加 `diagram`
-   - 指标 / 数字很多 → 再加 `chart`
-2. **它更像「系统」还是「体验」？**
-   - 偏系统设计、架构、流程 → `core + diagram (+ chart)`
-   - 偏产品体验、页面、交互 → `mockup (+ interactive) + core`
-3. **有没有「需要用户亲手操作一下才懂」的部分？**
-   - 有：把这块拆成 `interactive` 模块（参数调节、状态切换、可视化 playground）
-4. **是否需要强烈的风格 / 情绪 / 品牌感？**
-   - 有：加上 `art`，让它可以弱化纯文字比重，用视觉说话。
+### Playground
 
-经验法则：
+项目自带一个完整的本地测试环境（`playground/`），可以直接体验 Generative UI 的效果：
 
-- 所有主题**至少**会有 `core`，再叠加其它视角。
-- 每个主题可以同时使用 2–4 个模块，让信息更立体。
-- 当遇到一个全新的主题时，只需要重新回答上面四个问题，就能自然映射到一组模块组合；未来新增主题或模块，都不需要改这套规则。
+```bash
+cd playground
+cp .env.example .env   # 配置 API Key
+npm install
+npm start              # 启动后访问 http://localhost:3456
+```
 
-常见主题的示例组合（可按需扩展）：
+Playground 包含：
+- Express 后端（SSE 流式代理，支持 OpenAI / Anthropic / 兼容 API）
+- Chat UI 前端（流式围栏检测 → 增量 DOM 预览 → sandbox iframe 渲染）
+- 4 个示例 widget（`examples/` 目录：流程图、图表、计算器、对比图）
 
-| 主题示例                     | 推荐模块组合                      |
-|------------------------------|-----------------------------------|
-| 任意技术 / 概念讲解          | core, diagram                     |
-| 任意数据相关主题             | core, chart, diagram              |
-| 任意产品 / 功能设计          | core, mockup, diagram             |
-| 任意交互或算法可视化         | core, diagram, interactive        |
-| 任意品牌 / 世界观 / 设定     | core, art, mockup                 |
-| 任意复杂策略 / 流程优化方案 | core, diagram, chart, interactive |
-| 任意「只想看视觉灵感」主题   | art, mockup, （可选少量 core）    |
-
-### 产物 B：渲染运行时（M2）
-
-框架无关的 JS 库（`@generative-ui/renderer`）。任何前端引入后就能渲染 widget。核心能力：流式围栏检测、HTML 清理（两阶段）、CSS 变量桥接、双模式渲染器（iframe / morphdom）。封装为 Web Component `<widget-renderer>`。
-
-### 产物 C：Aight 集成（M3）
-
-在 Aight app 聊天界面中集成产物 B，实现 WKWebView 内嵌 widget 渲染、深色/浅色主题同步、widget 内按钮触发追问。
+Playground 同时也是 M2 渲染运行时的原型验证环境 —— `playground/public/app.js` 中已验证了完整的三阶段渲染流水线，M2 在此基础上提取为可复用库。
 
 ---
 
-## 设计决策
+## 渠道适配与使用方式
 
-### 为什么选代码围栏而非 tool_use？
+不同渠道的消息容器能力差异很大。项目设计了四种渲染策略，按渠道能力自动选择：
 
-Claude 原生用 `show_widget` tool call，但我们选择代码围栏：
-- 不依赖特定 SDK 的 tool 注册机制
-- 文本流天然支持流式传输（边生成边渲染）
-- 任何能输出 markdown 的模型都能用（Claude, GPT, Kimi, Zhipu...）
-- 复用现有 markdown 解析管线
+| 策略 | 适用渠道 | 方式 |
+|------|---------|------|
+| 满血渲染 | Web（iframe）、App（WKWebView） | `@generative-ui/renderer` 完整流水线，流式预览 + JS 交互 |
+| 静态图片 + 按钮 | 飞书、Telegram、微信 | headless 渲染 widget 为 PNG，drill-down 映射为原生按钮 |
+| 富文本卡片 | 飞书 | widget 结构映射为飞书 Message Card JSON |
+| H5 跳转 | 飞书、Telegram、微信 | widget 存储到临时 URL，在内置浏览器中打开 |
 
-### 为什么支持双渲染模式？
+### Web 集成
 
-Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），CodePilot 用 sandbox iframe（安全但有性能开销）。我们同时支持两种模式：
-- **iframe 模式**：适合不可信环境（第三方集成、公开 chat），完全隔离
-- **morphdom 模式**：适合可信环境（自有产品），更流畅的渲染体验
+如果你有自己的 Web 应用，可以直接引入渲染运行时：
 
-### 为什么内置 Tailwind-like 工具类？
+```html
+<script src="@generative-ui/renderer"></script>
+<widget-renderer stream="..."></widget-renderer>
+```
 
-- 避免加载 Tailwind CDN（污染全局样式 + 与宿主冲突）
-- 模型可以用熟悉的类名（flex, grid, p-4, rounded-lg）
-- 只包含常用子集，体积可控
+或者参考 `playground/` 的实现，将流式渲染逻辑嵌入你自己的聊天界面。
 
-### 为什么 CSS 变量桥接而非直接用宿主变量？
+### 开发自定义渠道适配器
 
-- 模型按标准变量名写 CSS（`--color-background-primary`）
-- 桥接层负责映射到不同宿主的实际变量
-- 换宿主只需改桥接层，模型 prompt 不变
+如果你需要接入飞书、Telegram、微信或其他渠道，可以参考 `architecture/m3-channel-adapters.md` 中的架构设计，实现自己的 Channel Adapter。每个 adapter 只需要：
+
+1. 接收 Widget Interceptor 解析出的 `{ title, widget_code }`
+2. 根据渠道能力选择渲染策略
+3. 调用对应的渲染服务（renderer / screenshot / card builder / hosting）
+4. 将结果通过渠道 API 投递
+
+新增渠道只需新增 adapter，不影响上游的 Skill 和 Renderer。
 
 ---
 
@@ -230,7 +164,7 @@ Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），
 
 ## CDN 白名单
 
-以下 CDN 被 CSP 策略允许，widget 内的 `<script src>` 只能从这些域加载：
+Widget 内的 `<script src>` 只能从以下 CDN 加载（CSP 强制执行）：
 
 - **cdnjs.cloudflare.com** — Chart.js, D3 等主流库
 - **cdn.jsdelivr.net** — npm 包 CDN
@@ -241,31 +175,13 @@ Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），
 
 ## 测试
 
-Playground 使用 Node.js 内置测试框架（`node:test` + `node:assert`），零外部依赖。
-
 ```bash
 cd playground
 
-# 全部测试
-npm test
-
-# 仅单元测试（parser / search / prompt）
-npm run test:unit
-
-# 仅 E2E + widget 渲染检查
-npm run test:e2e
+npm test           # 全部测试
+npm run test:unit  # 仅单元测试（parser / search / prompt / planner）
+npm run test:e2e   # 仅 E2E + widget 渲染检查
 ```
-
-测试覆盖：
-- **parser** — 围栏检测、partial JSON 提取、HTML 转义、inline markdown
-- **search** — locale 检测（中/英/日/韩 + 国家/语言 hint）
-- **prompt** — system prompt 加载、模块去重、自动 prepend core
-- **e2e** — API 端点校验（providers / chat SSE 流）
-- **widget-render** — example HTML 静态检查（禁止标签、CDN 白名单、CSS 变量）
-
-开发规则：
-- 日常开发 / debug：运行相关模块的单元测试（`npm run test:unit` 或指定文件）
-- 提交代码前：运行 `npm test` 全量回归，确认无交叉影响
 
 ---
 
@@ -274,11 +190,11 @@ npm run test:e2e
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | M0 | 技术分析 + 源码研究 + 项目规划 | ✅ 完成 |
-| M1 | 产物 A：Prompt Skill 创建 + 验证 | ✅ 完成（待模型验证） |
-| M2 | 产物 B：渲染运行时 JS 库 | 待开始 |
-| M3 | 产物 C：Aight 集成 | 待开始 |
+| M1 | Prompt Skill 创建 + 验证 | ✅ 完成（待模型验证） |
+| M2 | 渲染运行时 JS 库 `@generative-ui/renderer` | 开发中 |
+| M3 | 渠道适配层 | 待开始 |
 
-详细开发计划参见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+详细开发计划参见 [DEVELOPMENT.md](./DEVELOPMENT.md)，渠道适配架构参见 [architecture/m3-channel-adapters.md](./architecture/m3-channel-adapters.md)。
 
 ---
 
@@ -288,7 +204,6 @@ npm run test:e2e
 - 逆向工程文章：[Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
 - pi-generative-ui 仓库：https://github.com/Michaelliv/pi-generative-ui （MIT 协议）
 - CodePilot 仓库：https://github.com/op7418/CodePilot （未声明开源协议）
-- Obsidian 存档：Knowledge/2026-03-15-claude-generative-ui.md（含 16 张图片）
 
 ---
 

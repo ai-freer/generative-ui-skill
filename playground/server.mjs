@@ -6,7 +6,7 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { searchWeb } from './lib/search.js';
-import { loadSystemPrompt } from './lib/prompt.js';
+import { loadSystemPrompt, MODULE_FILES } from './lib/prompt.js';
 import { detectTruncation, runPlanner } from './lib/planner.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,14 +25,54 @@ const PROVIDERS_PATH = join(__dirname, 'providers.json');
 
 function loadProviders() {
   const raw = readFileSync(PROVIDERS_PATH, 'utf8');
-  return JSON.parse(raw);
+  const providers = JSON.parse(raw);
+
+  // Resolve modelsEnv: providers that read model list from env (e.g. OpenRouter)
+  for (const p of providers) {
+    if (p.modelsEnv && !p.models) {
+      const envVal = process.env[p.modelsEnv];
+      p.models = envVal ? envVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+    }
+  }
+
+  // Anthropic-compatible proxy (fully env-driven)
+  const acKey = process.env.ANTHROPIC_COMPAT_API_KEY;
+  const acUrl = process.env.ANTHROPIC_COMPAT_BASE_URL;
+  const acModels = process.env.ANTHROPIC_COMPAT_MODELS;
+  if (acKey && acUrl && acModels) {
+    providers.push({
+      id: 'anthropic-compat',
+      name: process.env.ANTHROPIC_COMPAT_NAME || 'Anthropic 兼容',
+      type: 'anthropic',
+      baseUrl: acUrl,
+      apiKeyEnv: 'ANTHROPIC_COMPAT_API_KEY',
+      models: acModels.split(',').map(s => s.trim()).filter(Boolean),
+    });
+  }
+
+  // OpenAI-compatible proxy (fully env-driven)
+  const ocKey = process.env.OPENAI_COMPAT_API_KEY;
+  const ocUrl = process.env.OPENAI_COMPAT_BASE_URL;
+  const ocModels = process.env.OPENAI_COMPAT_MODELS;
+  if (ocKey && ocUrl && ocModels) {
+    providers.push({
+      id: 'openai-compat',
+      name: process.env.OPENAI_COMPAT_NAME || 'OpenAI 兼容',
+      type: 'openai',
+      baseUrl: ocUrl,
+      apiKeyEnv: 'OPENAI_COMPAT_API_KEY',
+      models: ocModels.split(',').map(s => s.trim()).filter(Boolean),
+    });
+  }
+
+  return providers;
 }
 
 function getAvailableProviders() {
   const all = loadProviders();
   return all.filter((p) => {
-    const key = process.env[p.apiKeyEnv] || (p.apiKeyEnv === 'ANTHROPIC_API_KEY' && process.env.ANTHROPIC_AUTH_TOKEN);
-    return key && key.trim().length > 0;
+    const key = process.env[p.apiKeyEnv];
+    return key && key.trim().length > 0 && p.models && p.models.length > 0;
   });
 }
 
@@ -89,7 +129,8 @@ app.get('/api/providers', (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
-  const { provider: providerId, model, messages = [], modules = ['core', 'diagram'], searchEnabled = false } = req.body;
+  const { provider: providerId, model, messages = [], searchEnabled = false } = req.body;
+  const modules = Object.keys(MODULE_FILES);
   if (!providerId || !model || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'provider, model and non-empty messages[] are required' });
   }
@@ -99,7 +140,7 @@ app.post('/api/chat', async (req, res) => {
   if (!provider) {
     return res.status(400).json({ error: 'unknown provider' });
   }
-  const apiKey = process.env[provider.apiKeyEnv] || (provider.apiKeyEnv === 'ANTHROPIC_API_KEY' && process.env.ANTHROPIC_AUTH_TOKEN);
+  const apiKey = process.env[provider.apiKeyEnv];
   if (!apiKey || !apiKey.trim()) {
     return res.status(500).json({ error: `API key for ${provider.name} is not set (${provider.apiKeyEnv})` });
   }
@@ -117,6 +158,9 @@ app.post('/api/chat', async (req, res) => {
 
   // Disable Nagle algorithm so small SSE chunks are sent immediately
   if (res.socket) res.socket.setNoDelay(true);
+
+  // Tell frontend which modules were loaded
+  res.write(`event: modules\ndata: ${JSON.stringify(modules)}\n\n`);
 
   let chunkCount = 0;
   const sendChunk = (text) => {
@@ -148,9 +192,8 @@ app.post('/api/chat', async (req, res) => {
     const useSearch = searchEnabled && !!SERPER_API_KEY;
 
     if (provider.type === 'anthropic') {
-      const baseURL = process.env.ANTHROPIC_BASE_URL || provider.baseUrl;
       const anthropic = new Anthropic(
-        baseURL ? { apiKey, baseURL } : { apiKey }
+        provider.baseUrl ? { apiKey, baseURL: provider.baseUrl } : { apiKey }
       );
       const anthropicMessages = messages.map((m) => ({
         role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -253,8 +296,7 @@ app.post('/api/chat', async (req, res) => {
           // Continue loop — but if this is the last round, do a final call without tools
           if (round === MAX_TOOL_ROUNDS - 1) {
             log(`[anthropic] tool loop exhausted (${MAX_TOOL_ROUNDS} rounds), forcing final call without tools`);
-            const baseURL = process.env.ANTHROPIC_BASE_URL || provider.baseUrl;
-            const finalClient = new Anthropic(baseURL ? { apiKey, baseURL } : { apiKey });
+            const finalClient = new Anthropic(provider.baseUrl ? { apiKey, baseURL: provider.baseUrl } : { apiKey });
             const finalStream = await finalClient.messages.stream({
               model, max_tokens: 32768, system: systemPrompt, messages: anthropicMessages,
             });
@@ -465,8 +507,7 @@ app.post('/api/chat', async (req, res) => {
           content: m.content,
         }));
         if (provider.type === 'anthropic') {
-          const baseURL = process.env.ANTHROPIC_BASE_URL || provider.baseUrl;
-          const rc = new Anthropic(baseURL ? { apiKey, baseURL } : { apiKey });
+          const rc = new Anthropic(provider.baseUrl ? { apiKey, baseURL: provider.baseUrl } : { apiKey });
           const rs = await rc.messages.stream({
             model, max_tokens: 32768, system: systemPrompt, messages: retryMessages,
           });
@@ -538,9 +579,8 @@ app.post('/api/chat', async (req, res) => {
         let callModel, callModelStream;
 
         if (provider.type === 'anthropic') {
-          const baseURL = process.env.ANTHROPIC_BASE_URL || provider.baseUrl;
           const anthropic = new Anthropic(
-            baseURL ? { apiKey, baseURL } : { apiKey }
+            provider.baseUrl ? { apiKey, baseURL: provider.baseUrl } : { apiKey }
           );
           callModel = async (msgs, sys) => {
             const resp = await anthropic.messages.create({

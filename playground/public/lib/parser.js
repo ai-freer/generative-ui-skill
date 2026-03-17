@@ -13,7 +13,81 @@ function escapeHtml(s) {
 function inlineMarkdown(s) {
   return s
     .replace(/\n/g, '<br>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/~~(.+?)~~/g, '<del>$1</del>')
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+    .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>');
+}
+
+function blockMarkdown(text) {
+  var lines = text.split('<br>');
+  var out = [];
+  var i = 0;
+  while (i < lines.length) {
+    var line = lines[i];
+    var headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      var level = headingMatch[1].length;
+      out.push('<h' + level + '>' + inlineFmt(headingMatch[2]) + '</h' + level + '>');
+      i++;
+      continue;
+    }
+    if (/^(?:---+|\*\*\*+)$/.test(line.trim())) {
+      out.push('<hr>');
+      i++;
+      continue;
+    }
+    var ulMatch = line.match(/^[\s]*[-*]\s+(.+)$/);
+    if (ulMatch) {
+      var items = [];
+      while (i < lines.length) {
+        var um = lines[i].match(/^[\s]*[-*]\s+(.+)$/);
+        if (!um) break;
+        items.push('<li>' + inlineFmt(um[1]) + '</li>');
+        i++;
+      }
+      out.push('<ul>' + items.join('') + '</ul>');
+      continue;
+    }
+    var olMatch = line.match(/^[\s]*\d+[.)]\s+(.+)$/);
+    if (olMatch) {
+      var olItems = [];
+      while (i < lines.length) {
+        var om = lines[i].match(/^[\s]*\d+[.)]\s+(.+)$/);
+        if (!om) break;
+        olItems.push('<li>' + inlineFmt(om[1]) + '</li>');
+        i++;
+      }
+      out.push('<ol>' + olItems.join('') + '</ol>');
+      continue;
+    }
+    var bqMatch = line.match(/^&gt;\s?(.*)$/);
+    if (bqMatch) {
+      var bqLines = [];
+      while (i < lines.length) {
+        var bm = lines[i].match(/^&gt;\s?(.*)$/);
+        if (!bm) break;
+        bqLines.push(inlineFmt(bm[1]));
+        i++;
+      }
+      out.push('<blockquote>' + bqLines.join('<br>') + '</blockquote>');
+      continue;
+    }
+    out.push(inlineFmt(line));
+    i++;
+  }
+  return out.join('\n');
+}
+
+function inlineFmt(s) {
+  return s
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/~~(.+?)~~/g, '<del>$1</del>')
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+    .replace(/(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>');
 }
 
@@ -153,13 +227,13 @@ function textToHtml(text) {
     const langLower = lang.toLowerCase();
     if (langLower === 'show-widget' || langLower === 'show_widget') {
       if (m.index > cursor) {
-        parts.push(inlineMarkdown(escaped.slice(cursor, m.index)));
+        parts.push(blockMarkdown(escaped.slice(cursor, m.index)));
       }
       cursor = m.index + m[0].length;
       continue;
     }
     if (m.index > cursor) {
-      parts.push(inlineMarkdown(escaped.slice(cursor, m.index)));
+      parts.push(blockMarkdown(escaped.slice(cursor, m.index)));
     }
     parts.push('<pre class="code-block"><code' + (lang ? ' data-lang="' + lang + '"' : '') + '>' + m[2] + '</code></pre>');
     cursor = m.index + m[0].length;
@@ -167,7 +241,7 @@ function textToHtml(text) {
   if (cursor < escaped.length) {
     let tail = escaped.slice(cursor);
     tail = tail.replace(/```(?:show-widget|show_widget)[\s\S]*/gi, '\n[图表内容被截断]');
-    parts.push(inlineMarkdown(tail));
+    parts.push(blockMarkdown(tail));
   }
   return parts.join('');
 }
@@ -175,6 +249,7 @@ function textToHtml(text) {
 export {
   escapeHtml,
   inlineMarkdown,
+  blockMarkdown,
   isShowWidgetFence,
   parseShowWidgetFence,
   findAllShowWidgetFences,

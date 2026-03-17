@@ -1,11 +1,10 @@
 [
   {
-    "id": "anthropic-proxy",
-    "name": "LtCraft",
+    "id": "anthropic",
+    "name": "Anthropic",
     "type": "anthropic",
-    "baseUrl": "https://ai.ltcraft.cn:443",
     "apiKeyEnv": "ANTHROPIC_API_KEY",
-    "models": ["claude-opus-4-6", "claude-sonnet-4-6", "gpt-5.4"]
+    "models": ["claude-opus-4-6", "claude-sonnet-4-6"]
   },
   {
     "id": "openai",
@@ -13,7 +12,31 @@
     "type": "openai",
     "baseUrl": "https://api.openai.com/v1",
     "apiKeyEnv": "OPENAI_API_KEY",
-    "models": ["gpt-5.4"]
+    "models": ["gpt-5.4", "gpt-5.2", "gpt-5.3-codex"]
+  },
+  {
+    "id": "google",
+    "name": "Google Gemini",
+    "type": "openai",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "apiKeyEnv": "GOOGLE_API_KEY",
+    "models": ["gemini-3.1-pro-preview", "gemini-3-flash"]
+  },
+  {
+    "id": "minimax",
+    "name": "MiniMax",
+    "type": "openai",
+    "baseUrl": "https://api.minimax.io/v1",
+    "apiKeyEnv": "MINIMAX_API_KEY",
+    "models": ["MiniMax-M2.5", "MiniMax-M2.5-highspeed"]
+  },
+  {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "type": "openai",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "apiKeyEnv": "OPENROUTER_API_KEY",
+    "modelsEnv": "OPENROUTER_MODELS"
   },
   {
     "id": "kimi",
@@ -21,7 +44,7 @@
     "type": "openai",
     "baseUrl": "https://api.moonshot.cn/v1",
     "apiKeyEnv": "KIMI_API_KEY",
-    "models": ["kimi-k2.5", "kimi-k2-turbo-preview", "moonshot-v1-128k"]
+    "models": ["kimi-k2.5"]
   },
   {
     "id": "kimi-coding",
