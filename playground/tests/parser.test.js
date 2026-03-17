@@ -340,6 +340,17 @@ describe('playground app regression', () => {
     assert.ok(!appJsSource.includes('function parseShowWidgetFence('));
   });
 
+  it('imports renderer package for buildWidgetDoc and sanitization', () => {
+    assert.ok(appJsSource.includes("from '/lib/renderer/index.js'"));
+    assert.ok(appJsSource.includes('buildWidgetDoc'));
+    assert.ok(appJsSource.includes('sanitizeForIframe'));
+    assert.ok(appJsSource.includes('sanitizeForStreaming'));
+    assert.ok(appJsSource.includes('stripUnclosedScript'));
+    // Should NOT have inline buildWidgetDoc function
+    assert.ok(!appJsSource.includes('function buildWidgetDoc('));
+    assert.ok(!appJsSource.includes("const CDN_ORIGINS"));
+  });
+
   it('loads app.js as an ES module', () => {
     assert.ok(indexHtmlSource.includes('<script type="module" src="app.js"></script>'));
   });

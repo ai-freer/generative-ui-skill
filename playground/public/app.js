@@ -7,7 +7,23 @@ import {
   textToHtml,
 } from './lib/parser.js';
 
+import {
+  buildWidgetDoc,
+  sanitizeForIframe,
+  sanitizeForStreaming,
+  stripUnclosedScript,
+  generateStreamingStyles,
+} from '/lib/renderer/index.js';
+
 (function () {
+  // Inject renderer's streaming preview styles (SVG classes + color ramps)
+  if (!document.getElementById('gu-streaming-styles')) {
+    const style = document.createElement('style');
+    style.id = 'gu-streaming-styles';
+    style.textContent = generateStreamingStyles();
+    document.head.appendChild(style);
+  }
+
   const STORAGE_KEY = 'gu-sessions';
 
   const SAMPLE_PROMPTS = [
@@ -453,7 +469,7 @@ import {
               const iframe = document.createElement('iframe');
               iframe.sandbox = 'allow-scripts allow-same-origin';
               iframe.title = 'assembled-widget';
-              iframe.srcdoc = buildWidgetDoc(data.assembled.widget_code);
+              iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(data.assembled.widget_code));
               wrap.appendChild(iframe);
               // Insert after planner progress
               if (plannerEl && plannerEl.nextSibling) {
@@ -682,7 +698,7 @@ import {
         const iframe = document.createElement('iframe');
         iframe.sandbox = 'allow-scripts allow-same-origin';
         iframe.title = f.parsed.title;
-        iframe.srcdoc = buildWidgetDoc(f.parsed.widget_code);
+        iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(f.parsed.widget_code));
         wrap.appendChild(iframe);
         container.appendChild(wrap);
       } else {
@@ -766,108 +782,6 @@ import {
     modelStatusEl.textContent = text || '';
   }
 
-  const CDN_ORIGINS = [
-    'https://cdnjs.cloudflare.com',
-    'https://cdn.jsdelivr.net',
-    'https://unpkg.com',
-    'https://esm.sh',
-  ];
-  const CSP =
-    "default-src 'none'; script-src 'unsafe-inline' " +
-    CDN_ORIGINS.join(' ') +
-    "; style-src 'unsafe-inline'; img-src data:; connect-src 'none';";
-
-  function buildWidgetDoc(widgetCode) {
-    const svgStyles = `
-:root {
-  --color-background-primary: #fff; --color-background-secondary: #f1f5f9; --color-background-tertiary: #e2e8f0;
-  --color-text-primary: #0f172a; --color-text-secondary: #64748b; --color-text-tertiary: #94a3b8;
-  --color-border-tertiary: rgba(0,0,0,.12); --color-border-secondary: rgba(0,0,0,.2);
-  --color-border-primary: rgba(0,0,0,.4);
-  --font-sans: system-ui,-apple-system,sans-serif; --font-serif: Georgia,serif; --font-mono: ui-monospace,monospace;
-  --border-radius-md: 8px; --border-radius-lg: 12px; --border-radius-xl: 16px;
-  --p: #0f172a; --s: #64748b; --t: #94a3b8; --bg2: #f1f5f9; --b: rgba(0,0,0,.12);
-}
-body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color-text-primary); background:#fff; }
-
-/* SVG text classes */
-.t  { font: 400 14px/1.4 var(--font-sans); fill: var(--color-text-primary); }
-.ts { font: 400 12px/1.4 var(--font-sans); fill: var(--color-text-secondary); }
-.th { font: 500 14px/1.4 var(--font-sans); fill: var(--color-text-primary); }
-
-/* SVG structural classes */
-.box { fill: var(--color-background-secondary); stroke: var(--color-border-tertiary); stroke-width: 0.5px; }
-.node { cursor: pointer; } .node:hover { opacity: 0.85; }
-.arr { stroke: var(--color-text-secondary); stroke-width: 1.5px; fill: none; }
-.leader { stroke: var(--color-text-tertiary); stroke-width: 0.5px; stroke-dasharray: 4 2; fill: none; }
-
-/* Color ramp classes — light mode fills (50), strokes (600), text title (800), subtitle (600) */
-.c-purple > rect,.c-purple > circle,.c-purple > ellipse { fill:#EEEDFE; stroke:#534AB7; stroke-width:0.5px; }
-.c-purple .t,.c-purple .th { fill:#3C3489; } .c-purple .ts { fill:#534AB7; }
-
-.c-teal > rect,.c-teal > circle,.c-teal > ellipse { fill:#E1F5EE; stroke:#0F6E56; stroke-width:0.5px; }
-.c-teal .t,.c-teal .th { fill:#085041; } .c-teal .ts { fill:#0F6E56; }
-
-.c-coral > rect,.c-coral > circle,.c-coral > ellipse { fill:#FAECE7; stroke:#993C1D; stroke-width:0.5px; }
-.c-coral .t,.c-coral .th { fill:#712B13; } .c-coral .ts { fill:#993C1D; }
-
-.c-pink > rect,.c-pink > circle,.c-pink > ellipse { fill:#FBEAF0; stroke:#993556; stroke-width:0.5px; }
-.c-pink .t,.c-pink .th { fill:#72243E; } .c-pink .ts { fill:#993556; }
-
-.c-gray > rect,.c-gray > circle,.c-gray > ellipse { fill:#F1EFE8; stroke:#5F5E5A; stroke-width:0.5px; }
-.c-gray .t,.c-gray .th { fill:#444441; } .c-gray .ts { fill:#5F5E5A; }
-
-.c-blue > rect,.c-blue > circle,.c-blue > ellipse { fill:#E6F1FB; stroke:#185FA5; stroke-width:0.5px; }
-.c-blue .t,.c-blue .th { fill:#0C447C; } .c-blue .ts { fill:#185FA5; }
-
-.c-green > rect,.c-green > circle,.c-green > ellipse { fill:#EAF3DE; stroke:#3B6D11; stroke-width:0.5px; }
-.c-green .t,.c-green .th { fill:#27500A; } .c-green .ts { fill:#3B6D11; }
-
-.c-amber > rect,.c-amber > circle,.c-amber > ellipse { fill:#FAEEDA; stroke:#854F0B; stroke-width:0.5px; }
-.c-amber .t,.c-amber .th { fill:#633806; } .c-amber .ts { fill:#854F0B; }
-
-.c-red > rect,.c-red > circle,.c-red > ellipse { fill:#FCEBEB; stroke:#A32D2D; stroke-width:0.5px; }
-.c-red .t,.c-red .th { fill:#791F1F; } .c-red .ts { fill:#A32D2D; }
-`;
-    return (
-      '<!DOCTYPE html><html><head><meta charset="UTF-8"/>' +
-      '<meta http-equiv="Content-Security-Policy" content="' +
-      CSP.replace(/"/g, '&quot;') +
-      '"/>' +
-      '<style>' + svgStyles + '</style></head><body>' +
-      widgetCode +
-      '<script>' +
-      'window.__widgetSendMessage=function(t){window.parent.postMessage({type:"widgetSendMessage",text:t},"*");};' +
-      'function reportHeight(){var h=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);window.parent.postMessage({type:"widgetResize",height:h},"*");}' +
-      'window.addEventListener("load",function(){reportHeight();setTimeout(reportHeight,300);setTimeout(reportHeight,1000);fixContrast();});' +
-      'new MutationObserver(function(){reportHeight();fixContrast();}).observe(document.body,{childList:true,subtree:true,attributes:true});' +
-      'function fixContrast(){' +
-        'document.querySelectorAll("svg rect, svg circle, svg ellipse, svg polygon").forEach(function(shape){' +
-          'var fill=shape.getAttribute("fill")||"";' +
-          'if(!fill||fill==="none"||fill==="transparent"||fill.startsWith("var("))return;' +
-          'var lum=parseLum(fill);if(lum===null||lum>100)return;' +
-          'var g=shape.closest("g")||shape.parentNode;' +
-          'g.querySelectorAll("text").forEach(function(t){' +
-            'var tf=t.getAttribute("fill")||"";' +
-            'var tl=parseLum(tf);' +
-            'if(tl!==null&&tl>180)return;' +
-            't.setAttribute("fill","#fff");' +
-          '});' +
-        '});' +
-      '}' +
-      'function parseLum(c){' +
-        'if(!c)return null;c=c.trim();' +
-        'var m=c.match(/^#([0-9a-f]{3,8})$/i);if(!m)return null;' +
-        'var h=m[1];' +
-        'if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];' +
-        'if(h.length<6)return null;' +
-        'var r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);' +
-        'return 0.299*r+0.587*g+0.114*b;' +
-      '}' +
-      '</script></body></html>'
-    );
-  }
-
   function createRenderState(container) {
     const textEl = document.createElement('div');
     textEl.className = 'stream-text';
@@ -904,7 +818,7 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
       const iframe = document.createElement('iframe');
       iframe.sandbox = 'allow-scripts';
       iframe.title = w.title;
-      iframe.srcdoc = buildWidgetDoc(w.widget_code);
+      iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(w.widget_code));
       wrap.appendChild(iframe);
       state.container.appendChild(wrap);
 
@@ -943,7 +857,7 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
           state.previewEl.className = 'widget-wrap widget-streaming';
           state.container.appendChild(state.previewEl);
         }
-        state.previewEl.innerHTML = partialCode;
+        state.previewEl.innerHTML = stripUnclosedScript(sanitizeForStreaming(partialCode));
       } else {
         if (!state.placeholderEl && !state.previewEl) {
           state.placeholderEl = document.createElement('div');
@@ -1025,7 +939,7 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
     const iframe = document.createElement('iframe');
     iframe.sandbox = 'allow-scripts allow-same-origin';
     iframe.title = taskId;
-    iframe.srcdoc = buildWidgetDoc(widgetCode);
+    iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(widgetCode));
     wrap.appendChild(iframe);
     container.appendChild(wrap);
   }

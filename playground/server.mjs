@@ -152,6 +152,7 @@ const WEB_SEARCH_TOOL_OPENAI = {
 const app = express();
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
+app.use('/lib/renderer', express.static(join(__dirname, '..', 'packages', 'renderer', 'dist')));
 
 app.get('/api/providers', (req, res) => {
   try {
