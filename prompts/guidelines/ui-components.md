@@ -7,11 +7,30 @@ Flat, clean, white surfaces. Minimal 0.5px borders. Generous whitespace. No grad
 - Borders: always `0.5px solid var(--color-border-tertiary)` (or `-secondary` for emphasis)
 - Corner radius: `var(--border-radius-md)` for most elements, `var(--border-radius-lg)` for cards
 - Cards: white bg (`var(--color-background-primary)`), 0.5px border, radius-lg, padding 1rem 1.25rem
-- Form elements (input, select, textarea, button, range slider) are pre-styled — write bare tags. Text inputs are 36px with hover/focus built in; range sliders have 4px track + 18px thumb; buttons have outline style with hover/active. Only add inline styles to override (e.g., different width).
-- Buttons: pre-styled with transparent bg, 0.5px border-secondary, hover bg-secondary, active scale(0.98). If it triggers sendPrompt, append a ↗ arrow.
+- Form elements (input, select, textarea, button, range slider) are pre-styled — write bare tags. Text inputs are 36px with hover/focus built in; range sliders have 4px track + 18px thumb; buttons have subtle pill style with hover/active. Only add inline styles to override (e.g., different width).
+- Buttons: pre-styled as subtle pills — bg-secondary fill, no border, pill radius (999px), 13px text, hover bg-tertiary, active scale(0.98). Use `<button>` for actionable follow-ups that trigger a new conversation turn (scenario changes, recalculations). Use `<a onclick="window.__widgetSendMessage('...')">` for exploratory "learn more" links. Append a ↗ arrow to either when it triggers sendPrompt.
 - **Round every displayed number.** JS float math leaks artifacts — `0.1 + 0.2` gives `0.30000000000000004`, `7 * 1.1` gives `7.700000000000001`. Any number that reaches the screen (slider readouts, stat card values, axis labels, data-point labels, tooltips, computed totals) must go through `Math.round()`, `.toFixed(n)`, or `Intl.NumberFormat`. Pick the precision that makes sense for the context — integers for counts, 1–2 decimals for percentages, `toLocaleString()` for currency. For range sliders, also set `step="1"` (or step="0.1" etc.) so the input itself emits round values.
 - Spacing: use rem for vertical rhythm (1rem, 1.5rem, 2rem), px for component-internal gaps (8px, 12px, 16px)
 - Box-shadows: none, except `box-shadow: 0 0 0 Npx` focus rings on inputs
+
+### Calculator patterns
+For calculators like BMI, loan, ROI, calorie, pricing, and conversion widgets, use the pattern that best matches the task rather than forcing one control type everywhere.
+
+**Preferred default for strong models**:
+- Match the control to the variable. Continuous values (height, weight, rate, years, temperature, percentage) usually work best with sliders plus live readouts. Precise or sparse inputs may work better with text or number fields.
+- Every range input MUST include an explicit `step="..."` attribute.
+- Every computed number shown to the user MUST be rounded or formatted in code with `Math.round()`, `.toFixed(n)`, or `Intl.NumberFormat`.
+- Prefer live readouts next to the controls so the current values are visible while dragging.
+- When a calculator naturally suggests a useful next step, a small follow-up CTA can make the widget feel more conversational and extensible. Use `<button>` for scenario changes ("What if the rate is 10%?") and `<a>` for exploratory links ("Learn about BMI limitations ↗").
+- When the calculator naturally invites deeper explanation, next-step guidance, or scenario exploration, consider adding a lightweight follow-up affordance that calls `window.__widgetSendMessage()`.
+
+**Fallback guidance when the task is a simple continuous-input calculator or you are unsure**:
+- Default to at least one `<input type="range">`
+- Add a visible readout beside the slider
+- Add `step="1"` / `step="0.1"` / `step="0.5"` as appropriate
+- Round the displayed output in code
+
+Keep the widget in valid `show-widget` JSON. Do not output raw HTML/CSS/JS outside the JSON wrapper.
 
 ### Metric cards
 For summary numbers (revenue, count, percentage) — surface card with muted 13px label above, 24px/500 number below. `background: var(--color-background-secondary)`, no border, `border-radius: var(--border-radius-md)`, padding 1rem. Use in grids of 2-4 with `gap: 12px`. Distinct from raised cards (which have white bg + border).
@@ -33,10 +52,20 @@ Contained mockups — mobile screens, chat threads, single cards, modals, small 
 
 Use the `show-widget` code fence (HTML mode) for the interactive controls — sliders, buttons, live state displays, charts. Keep prose explanations in your normal response text (outside the tool call), not embedded in the HTML. No card wrapper. Whitespace is the container.
 
+Before finishing an interactive calculator widget, verify all of these:
+- The chosen control type matches the task
+- Every slider has `step`
+- Every displayed computed value is rounded/formatted in code
+- Colors and surfaces use CSS variables
+- The final output is valid `show-widget` JSON
+- If a follow-up would genuinely help, consider exposing it as a small CTA rather than front-loading more text
+
+For continuous-input explainers and calculators, prefer sliders + live readouts. For precise-entry tasks, number or text inputs are fine.
+
 ```html
 <div style="display: flex; align-items: center; gap: 12px; margin: 0 0 1.5rem;">
   <label style="font-size: 14px; color: var(--color-text-secondary);">Years</label>
-  <input type="range" min="1" max="40" value="20" id="years" style="flex: 1;" />
+  <input type="range" min="1" max="40" step="1" value="20" id="years" style="flex: 1;" oninput="updateInterest()" />
   <span style="font-size: 14px; font-weight: 500; min-width: 24px;" id="years-out">20</span>
 </div>
 
@@ -48,9 +77,23 @@ Use the `show-widget` code fence (HTML mode) for the interactive controls — sl
 <div style="margin: 2rem 0; position: relative; height: 240px;">
   <canvas id="chart"></canvas>
 </div>
+
+<div style="margin-top: 1rem; display: flex; align-items: center; gap: 12px;">
+  <button onclick="window.__widgetSendMessage('What if I increase the rate to 10%?')">Try 10% rate ↗</button>
+  <a onclick="window.__widgetSendMessage('Explain the rule of 72')">Rule of 72 ↗</a>
+</div>
+
+<script>
+  function updateInterest() {
+    const years = Number(document.getElementById('years').value);
+    const total = Math.round(1000 * Math.pow(1.07, years));
+    document.getElementById('years-out').textContent = years;
+    document.getElementById('result').textContent = `£${total.toLocaleString()}`;
+  }
+</script>
 ```
 
-Use `window.__widgetSendMessage()` to let users ask follow-ups: `window.__widgetSendMessage('What if I increase the rate to 10%?')`
+When a follow-up path would make the widget more useful, `window.__widgetSendMessage()` is a good fit: `window.__widgetSendMessage('What if I increase the rate to 10%?')`
 
 ### 2. Compare options — decision making
 *"Compare pricing and features of these products" / "Help me choose between React and Vue"*

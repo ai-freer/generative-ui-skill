@@ -468,15 +468,15 @@ renderer.parseAndRender(fullModelOutput);
 | 策略 | 适用渠道 | 方式 |
 |------|---------|------|
 | A 满血渲染 | Aight (WKWebView)、Web (iframe) | `@generative-ui/renderer` 完整流水线 |
-| B 静态图片 + 轻交互 | 飞书、Telegram、微信 | headless 渲染 PNG + 原生按钮 |
+| B 静态图片 + 轻交互 | 飞书、Telegram、QQ | headless 渲染 PNG + 原生按钮 |
 | C 富文本卡片 | 飞书 | 结构化 widget → Message Card JSON |
-| D H5 跳转 | 飞书、Telegram、微信 | widget 存储到临时 URL，内置浏览器打开 |
+| D H5 跳转 | 飞书、Telegram、QQ | widget 存储到临时 URL，内置浏览器打开 |
 
 ### 依赖
 
 - 产物 B（`@generative-ui/renderer`）已发布 npm
 - OpenClaw Agent Runtime 消息投递流水线支持中间件扩展
-- 各渠道 Bot API 接入（飞书 / Telegram / 微信）
+- 各渠道 Bot API 接入（飞书 / Telegram / QQ）
 
 ### 新增组件
 
@@ -486,7 +486,7 @@ renderer.parseAndRender(fullModelOutput);
 - Widget Hosting — 临时存储 widget HTML，生成短链供 H5 跳转
 - Drill-down Extractor — 提取 `__widgetSendMessage` 调用，映射为各渠道原生按钮
 
-具体开发计划在 M2 完成后制定。
+开发计划：[`architecture/m3-development-plan.md`](architecture/m3-development-plan.md)
 
 ---
 

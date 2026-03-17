@@ -177,37 +177,39 @@
 - 当前限制：`playground/server.mjs` 现在固定注入全部 guidelines，而不是按用例清单单独切模块，所以本次结果反映的是“全量 prompt 注入”下的真实行为
 - 浏览器检查：本轮已完成条目未捕获到 CSP 违规，也未记录到页面级 console error / warn
 - 并发限制：多模型并发时，部分请求出现 `BodyStreamBuffer was aborted`；这些条目按“失败（流中断）”记录，建议后续串行复测确认
-- 2026-03-18 补测：已对用例 3、4 做全模型串行复测，并对部分“并发实测流中断”条目做串行补测；未完成的剩余补测见表内备注
+- 2026-03-18 补测：已对用例 3、4 做全模型串行复测，并对“并发实测流中断”条目持续做串行补测；其中 `Claude Sonnet 4.6 / 用例 1` 已根据手工截图复核改判为通过，后续补测结果已同步回填表格
+- 2026-03-18 Prompt 调整后复测（用例 3）：`Claude Opus 4.6` 未见质量退步，但这轮未主动产出 follow-up CTA；`Claude Sonnet 4.6` 补齐 CTA 且通过；`Seed 2.0 Pro`、`GLM-5` 这轮也出现了 CTA，但仍未稳定命中 `Math.round()`；`Kimi K2.5` 在 CTA 复测中再次出现合法 JSON 不稳定
+- 2026-03-18 CTA 提醒补充后复测（用例 3）：`Claude Opus 4.6` 依旧稳定通过，但连续两轮都未主动产出 CTA；`Claude Sonnet 4.6` 稳定命中 CTA 且保持通过；`Kimi K2.5` 本轮同时命中 CTA 与 `Math.round()`，回到通过；`Seed 2.0 Pro`、`GLM-5` 都命中 CTA，但仍未稳定补齐 `Math.round()`
 - 静态回归：`playground/tests/structural-diagram.test.js` 已锁定结构图外层 `rx>=20`、20px 容器内边距和内层不同色系；后续改 prompt 可先跑该单测再做多模型实测
 
 ### 汇总结论
 
 - Claude Opus 4.6：稳定性最好，本轮复测后所有已测用例都能稳定输出合格 widget
 - Seed 2.0 Pro：整体次优，图表、mockup、品牌和复杂策略表现较好，但 `BMI` 交互细节、无 widget 场景约束较弱
-- GLM-5：串行补测后稳定性明显改善，图表、结构图、算法可视化、复杂策略和产品 mockup 都已补测通过
-- Claude Sonnet 4.6 / Kimi K2.5：串行补测后大部分“流中断”已恢复；Kimi 仅剩结构图 fence 格式问题，Sonnet 仍在产品 mockup 与纯视觉灵感上偶发流中断
-- 共同问题：`BMI` 计算器类交互组件最容易遗漏 `step` 或 `Math.round()`；结构图修复后大多数模型已达标，但 Kimi 仍偶发输出非 JSON 的裸 `show-widget` fence
+- GLM-5：串行补测后稳定性明显改善，图表、结构图、算法可视化、复杂策略、产品 mockup 与 `BMI` 交互组件都已补测通过
+- Claude Sonnet 4.6 / Kimi K2.5：串行补测后大部分“流中断”已恢复；两者此前因阻断或格式异常失败的条目已基本补齐，其中 Kimi 的 `BMI` 交互组件已补测通过
+- 共同问题：`BMI` 计算器类交互组件仍容易遗漏数值格式化细节；当前主要残留在 `Claude Sonnet 4.6` 与 `Seed 2.0 Pro` 的 `Math.round()` 命中上
 
 
 | 模型                | 用例             | 通过/失败                                       | 备注                                                                     |
 | ----------------- | -------------- | ------------------------------------------- | ---------------------------------------------------------------------- |
 | Claude Opus 4.6   | 1. 流程图生成       | 通过 ✅ | SVG，`viewBox=0 0 680 520`，使用 `c-coral/c-gray/c-purple/c-teal`，8 个可点击节点 |
-| Claude Sonnet 4.6 | 1. 流程图生成       | 失败 ❌ | 单独复跑时未输出 widget                                                        |
+| Claude Sonnet 4.6 | 1. 流程图生成       | 通过 ✅ | 根据手工截图复核，已输出合格 SVG 流程图，包含多泳道、JWT 生成/校验节点与说明文字 |
 | Kimi K2.5         | 1. 流程图生成       | 通过 ✅ | 单独复跑通过，SVG，`viewBox=0 0 680 480`，7 个可点击节点                              |
 | Seed 2.0 Pro      | 1. 流程图生成       | 通过 ✅ | SVG，`viewBox=0 0 680 450`，使用 `c-blue/c-purple`，7 个可点击节点                |
 | GLM-5             | 1. 流程图生成       | 通过 ✅ | SVG，`viewBox=0 0 680 620`，10 个可点击节点                                    |
 |  |  |  |  |
 | Claude Opus 4.6   | 2. 数据图表        | 通过 ✅ | 输出 Chart.js widget，`canvas` 存在，CDN 为 `cdnjs.cloudflare.com`            |
 | Claude Sonnet 4.6 | 2. 数据图表        | 通过 ✅ | 串行补测通过，输出 Chart.js widget，`canvas` 存在 |
-| Kimi K2.5         | 2. 数据图表        | 失败 ❌ | 未输出 widget                                                             |
+| Kimi K2.5         | 2. 数据图表        | 通过 ✅ | 串行补测通过，输出 Chart.js widget，趋势图与指标卡片完整 |
 | Seed 2.0 Pro      | 2. 数据图表        | 通过 ✅ | 输出 Chart.js widget，`canvas` 存在，CDN 为 `cdnjs.cloudflare.com`            |
 | GLM-5             | 2. 数据图表        | 通过 ✅ | 输出 Chart.js widget，含指标卡片，CDN 为 `cdnjs.cloudflare.com`                  |
 |  |  |  |  |
 | Claude Opus 4.6   | 3. 交互组件        | 通过 ✅ | 有滑块，包含 `step`，使用 `Math.round()` 和 CSS 变量                               |
-| Claude Sonnet 4.6 | 3. 交互组件        | 失败 ❌ | 串行补测仍未达标：改为数字输入框，无 `step`，也未检测到 `Math.round()` |
-| Kimi K2.5         | 3. 交互组件        | 失败 ❌ | 串行补测仍未达标：有滑块和数字输入，但未检测到 `step` |
-| Seed 2.0 Pro      | 3. 交互组件        | 失败 ❌ | 串行补测仍未达标：有滑块，但未检测到 `step`，也未检测到 `Math.round()` |
-| GLM-5             | 3. 交互组件        | 失败 ❌ | 串行补测仍未达标：有滑块，但未检测到 `step` |
+| Claude Sonnet 4.6 | 3. 交互组件        | 失败 ❌ | Prompt 强化后已补齐双滑块、`step` 和 CSS 变量，但仍未检测到 `Math.round()` |
+| Kimi K2.5         | 3. 交互组件        | 通过 ✅ | Prompt 强化后补测通过：双滑块、`step`、`Math.round()` 和 CSS 变量齐全 |
+| Seed 2.0 Pro      | 3. 交互组件        | 失败 ❌ | Prompt 强化后已补齐双滑块、`step` 和 CSS 变量，但仍未检测到 `Math.round()` |
+| GLM-5             | 3. 交互组件        | 通过 ✅ | Prompt 强化后补测通过：双滑块、`step`、`Math.round()` 和 CSS 变量齐全 |
 |  |  |  |  |
 | Claude Opus 4.6   | 4. 对比图         | 通过 ✅ | 串行复测通过；并排对比卡片、颜色区分清晰、可点击追问，当前方案未使用字面 `c-*` class |
 | Claude Sonnet 4.6 | 4. 对比图         | 通过 ✅ | 串行复测通过；并排对比卡片、颜色区分清晰、可点击追问 |
@@ -223,7 +225,7 @@
 |  |  |  |  |
 | Claude Opus 4.6   | 6. 结构图         | 通过 ✅ | 外层 `rx=20`，`viewBox=0 0 680 620`，多色区块清晰                                |
 | Claude Sonnet 4.6 | 6. 结构图         | 通过 ✅ | 串行补测通过，输出 SVG 结构图，`viewBox=0 0 680 620`，外层容器圆角已达标 |
-| Kimi K2.5         | 6. 结构图         | 失败 ❌ | 串行补测未通过：输出了裸 `show-widget` SVG fence，未包成合法 JSON |
+| Kimi K2.5         | 6. 结构图         | 通过 ✅ | 根据手工截图复核通过，已输出合格 Kubernetes 架构图，分层清晰，节点与连线完整 |
 | Seed 2.0 Pro      | 6. 结构图         | 通过 ✅ | 串行补测通过，输出 SVG 结构图，`viewBox=0 0 680 600`，外层容器圆角已达标 |
 | GLM-5             | 6. 结构图         | 通过 ✅ | 串行补测通过，输出 SVG 结构图，`viewBox=0 0 680 620`，外层容器圆角已达标 |
 |  |  |  |  |
@@ -240,7 +242,7 @@
 | GLM-5             | 8. CDN 合规      | 通过 ✅ | 串行补测通过，输出 D3 widget，外链脚本符合白名单 |
 |  |  |  |  |
 | Claude Opus 4.6   | 9. 产品/功能设计     | 通过 ✅ | 生成完整商品详情页 mockup，使用 CSS 变量并包含 CTA                                      |
-| Claude Sonnet 4.6 | 9. 产品/功能设计     | 失败 ❌ | 串行补测仍流中断：`BodyStreamBuffer was aborted` |
+| Claude Sonnet 4.6 | 9. 产品/功能设计     | 通过 ✅ | 最终串行补测通过，生成完整商品详情页 mockup，购买 CTA 与模块信息完整 |
 | Kimi K2.5         | 9. 产品/功能设计     | 通过 ✅ | 最终串行补测通过，生成完整商品详情页 mockup，购买 CTA 与模块信息完整 |
 | Seed 2.0 Pro      | 9. 产品/功能设计     | 通过 ✅ | 生成完整商品详情页 mockup，首屏信息与购买 CTA 齐全                                        |
 | GLM-5             | 9. 产品/功能设计     | 通过 ✅ | 串行补测通过，生成完整商品详情页 mockup，CTA 与模块结构齐全 |
@@ -264,7 +266,7 @@
 | GLM-5             | 12. 复杂策略/流程优化  | 通过 ✅ | 串行补测通过，输出可点击流程图，关键指标完整 |
 |  |  |  |  |
 | Claude Opus 4.6   | 13. 纯视觉灵感      | 通过 ✅ | 视觉氛围与材质提示平衡，整体偏视觉化                                                     |
-| Claude Sonnet 4.6 | 13. 纯视觉灵感      | 失败 ❌ | 串行补测仍流中断：`BodyStreamBuffer was aborted` |
+| Claude Sonnet 4.6 | 13. 纯视觉灵感      | 通过 ✅ | 根据手工截图复核通过，已输出以视觉卡片为主的侘寂风室内灵感板，氛围与层次完整 |
 | Kimi K2.5         | 13. 纯视觉灵感      | 通过 ✅ | 输出以视觉卡片为主，侘寂元素完整                                                       |
-| Seed 2.0 Pro      | 13. 纯视觉灵感      | 失败 ❌ | 更像结构化元素清单，视觉氛围不足，文字比重偏高                                                |
+| Seed 2.0 Pro      | 13. 纯视觉灵感      | 失败 ❌ | 原始 prompt 下更像结构化元素清单，视觉氛围不足；手工补测显示，若在提示词中明确要求“设计图/视觉方式呈现”，可触发 Art 模组并生成合格设计图 |
 | GLM-5             | 13. 纯视觉灵感      | 通过 ✅ | 视觉与材质氛围较好，整体符合侘寂灵感展示                                                   |

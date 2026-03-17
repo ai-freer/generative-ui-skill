@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CDN_WHITELIST,
   DEFAULT_CSS_VAR_MAPPING,
+  DARK_CSS_VAR_MAPPING,
   ALL_COLOR_NAMES,
   generateIframeStyles,
   generateStreamingStyles,
@@ -21,6 +22,20 @@ describe('DEFAULT_CSS_VAR_MAPPING', () => {
     expect(DEFAULT_CSS_VAR_MAPPING['--color-text-primary']).toBeDefined();
     expect(DEFAULT_CSS_VAR_MAPPING['--color-background-primary']).toBeDefined();
     expect(DEFAULT_CSS_VAR_MAPPING['--font-sans']).toBeDefined();
+  });
+});
+
+describe('DARK_CSS_VAR_MAPPING', () => {
+  it('contains dark-mode color variables', () => {
+    expect(DARK_CSS_VAR_MAPPING['--color-text-primary']).toBe('#f1f5f9');
+    expect(DARK_CSS_VAR_MAPPING['--color-background-primary']).toBe('#1e293b');
+    expect(DARK_CSS_VAR_MAPPING['--font-sans']).toBeDefined();
+  });
+
+  it('has the same keys as DEFAULT_CSS_VAR_MAPPING', () => {
+    const lightKeys = Object.keys(DEFAULT_CSS_VAR_MAPPING).sort();
+    const darkKeys = Object.keys(DARK_CSS_VAR_MAPPING).sort();
+    expect(darkKeys).toEqual(lightKeys);
   });
 });
 
@@ -64,6 +79,39 @@ describe('generateIframeStyles', () => {
     const css = generateIframeStyles(custom);
     expect(css).toContain('--color-text-primary: red');
     expect(css).toContain('--font-sans: Arial');
+  });
+
+  it('includes button and anchor pre-styles', () => {
+    const css = generateIframeStyles();
+    expect(css).toContain('button {');
+    expect(css).toContain('button:hover');
+    expect(css).toContain('button:active');
+    expect(css).toContain('a {');
+    expect(css).toContain('a:hover');
+  });
+
+  it('includes dark mode media query with dark variables', () => {
+    const css = generateIframeStyles();
+    expect(css).toContain('prefers-color-scheme: dark');
+    expect(css).toContain('#1e293b');
+    expect(css).toContain('#f1f5f9');
+  });
+
+  it('uses CSS variable for body background instead of hardcoded #fff', () => {
+    const css = generateIframeStyles();
+    expect(css).toContain('background:var(--color-background-primary)');
+    expect(css).not.toContain('background:#fff');
+  });
+
+  it('includes dark color ramps inside media query', () => {
+    const css = generateIframeStyles();
+    // Dark ramps use inverted fills (800 stop) — e.g. purple dark fill is #3C3489
+    const darkSection = css.split('prefers-color-scheme: dark');
+    expect(darkSection.length).toBeGreaterThan(2); // vars + ramps = at least 2 dark media queries
+    // Check a dark ramp value (purple 800 fill)
+    expect(css).toContain('fill:#3C3489');
+    // Check dark ramp stroke (purple 200)
+    expect(css).toContain('stroke:#AFA9EC');
   });
 });
 

@@ -24,7 +24,7 @@ export function buildWidgetDoc(widgetCode: string, options?: IframeDocOptions): 
   const maxH = options?.maxHeight ?? 800;
 
   return (
-    '<!DOCTYPE html><html><head><meta charset="UTF-8"/>' +
+    '<!DOCTYPE html><html style="color-scheme:light dark"><head><meta charset="UTF-8"/>' +
     '<meta http-equiv="Content-Security-Policy" content="' +
     csp.replace(/"/g, '&quot;') +
     '"/>' +
