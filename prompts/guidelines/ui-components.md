@@ -55,13 +55,29 @@ Use `window.__widgetSendMessage()` to let users ask follow-ups: `window.__widget
 ### 2. Compare options — decision making
 *"Compare pricing and features of these products" / "Help me choose between React and Vue"*
 
-Use the `show-widget` code fence (HTML mode). Side-by-side card grid for options. Highlight differences with semantic colors. Interactive elements for filtering or weighting.
+Use the `show-widget` code fence (SVG mode for side-by-side diagrams, HTML mode for card grids). Highlight differences with distinct color ramps. Interactive elements for filtering or weighting.
 
 - Use `repeat(auto-fit, minmax(160px, 1fr))` for responsive columns
 - Each option in a card. Use badges for key differentiators.
 - Add `window.__widgetSendMessage()` buttons: `window.__widgetSendMessage('Tell me more about the Pro plan')`
 - Don't put comparison tables inside this tool — output them as regular markdown tables in your response text instead. The tool is for the visual card grid only.
 - When one option is recommended or "most popular", accent its card with `border: 2px solid var(--color-border-info)` only (2px is deliberate — the only exception to the 0.5px rule, used to accent featured items) — keep the same background and border as the other cards. Add a small badge (e.g. "Most popular") above or inside the card header using `background: var(--color-background-info); color: var(--color-text-info); font-size: 12px; padding: 4px 12px; border-radius: var(--border-radius-md)`.
+- **Each option card MUST have a tinted background from a different `c-*` ramp** — never white/neutral for comparison cards. This is the primary visual cue that tells the user "these are different things". Pick from purple, teal, coral, pink (the general-purpose ramps — avoid blue/green/amber/red unless the option genuinely maps to info/success/warning/danger). 2-3 ramps max.
+  - **SVG mode**: wrap each side in `<g class="c-purple">` / `<g class="c-teal">` etc. — the ramp class handles fill, stroke, and text automatically.
+  - **HTML mode**: set the card's `background` to the ramp's **50 stop** (the lightest shade). Title text uses the **800 stop**, body/subtitle uses the **600 stop**. Pick hex values from the color-palette table — don't invent off-table values.
+
+```html
+<!-- Option A card — purple ramp -->
+<div style="background: #EEEDFE; border-radius: var(--border-radius-lg); padding: 1.25rem;" onclick="window.__widgetSendMessage('Tell me more about REST')">
+  <h3 style="color: #3C3489; font-size: 18px; font-weight: 500; margin: 0 0 8px;">REST</h3>
+  <p style="color: #534AB7; font-size: 14px; margin: 0;">Resource-oriented, multiple endpoints</p>
+</div>
+<!-- Option B card — teal ramp -->
+<div style="background: #E1F5EE; border-radius: var(--border-radius-lg); padding: 1.25rem;" onclick="window.__widgetSendMessage('Tell me more about GraphQL')">
+  <h3 style="color: #085041; font-size: 18px; font-weight: 500; margin: 0 0 8px;">GraphQL</h3>
+  <p style="color: #0F6E56; font-size: 14px; margin: 0;">Query-oriented, single endpoint</p>
+</div>
+```
 
 ### 3. Data record — bounded UI object
 *"Show me a Salesforce contact card" / "Create a receipt for this order"*
