@@ -345,10 +345,10 @@ renderer.parseAndRender(fullModelOutput);
 | 流式等待感 | 围栏未闭合时只显示占位符 | 流式 DOM 预览：提取部分 widget_code 直接渲染 | ✅ playground 已验证 |
 | 深色填充遮字 | 模型 hardcode 深色 SVG 填充 | iframe 内注入 fixContrast() 自动修正 | ✅ playground 已验证 |
 | SVG class 失效 | 模型用 c-blue/t 等 class 但未注入 CSS | iframe + 预览 div 均注入完整 SVG 预置 class | ✅ playground 已验证 |
-| 滚动回跳 | streaming→final 切换导致高度突变 | 预览→iframe 切换时保持 min-height 平滑过渡 | ⚠️ 部分解决：streaming 有 min-height+transition，但与 iframe min-height 不一致（120 vs 300），→ M2b 统一处理 |
-| Script 代码泄露 | 未闭合 `<script>` 标签内容可见 | 流式预览阶段截断未闭合 script | ❌ 未解决 → M2a streaming-preview 实现 |
-| iframe Ready 竞态 | 消息早于 iframe 加载完成 | iframe onLoad 回调兜底 + ready 握手 | ❌ 未解决 → M2b iframe-renderer 实现 |
-| 主题同步 | iframe 内无法响应宿主深色/浅色切换 | postMessage `widget:theme` 通知 iframe 重新注入 CSS 变量 | ❌ 未解决 → M2b iframe-renderer 实现 |
+| 滚动回跳 | streaming→final 切换导致高度突变 | 预览→iframe 切换时保持 min-height 平滑过渡 | ✅ M2b renderer 统一 min-height: 300px + transition |
+| Script 代码泄露 | 未闭合 `<script>` 标签内容可见 | 流式预览阶段截断未闭合 script | ✅ M2a `stripUnclosedScript()` 已实现 |
+| iframe Ready 竞态 | 消息早于 iframe 加载完成 | iframe onLoad 回调兜底 + ready 握手 | ✅ M2b `widgetReady` postMessage 已实现 |
+| 主题同步 | iframe 内无法响应宿主深色/浅色切换 | postMessage `widget:theme` 通知 iframe 重新注入 CSS 变量 | ⏳ 延后 — M2c 或 M3 按需实现 |
 
 ### 实施分期
 
