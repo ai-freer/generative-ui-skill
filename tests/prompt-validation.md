@@ -4,9 +4,11 @@
 
 ## 验证模型
 
+- Claude Opus 4.6
 - Claude Sonnet 4.6
 - Kimi K2.5
 - Seed 2.0 Pro
+- GLM-5
 - GPT-5.4
 
 ## 用例清单

@@ -160,6 +160,18 @@ Playground 同时也是 M2 渲染运行时的原型验证环境 —— `playgrou
 | Seed 2.0 Pro | 待验证 | 需测试 prompt 遵循度和生成质量 |
 | 其他 markdown 模型 | 理论可行 | 需验证 prompt 遵循度 |
 
+### 多模型适应策略
+
+不同模型的指令遵循能力差异显著，尤其体现在交互设计（drill-down、follow-up）上：
+
+- **强模型**（Claude Opus/Sonnet、GPT-4/5）—— 能自主判断哪些内容值得展开，主动在关键节点添加 drill-down 交互，生成追问引导。Prompt 只需给出原则性规则，模型自行决策。
+- **中等模型**（Kimi K2.5、Seed 2.0 Pro 等）—— 能完成基本的 widget 渲染，但对"什么内容值得交互"的判断较弱，容易输出纯静态图表。
+
+为此，System Prompt 采用**分层引导**设计：
+1. 原则层 —— 定义"meaningful node"的判断标准（术语、数据点、流程步骤、对比项），强模型据此自主决策
+2. 兜底倾向 —— "When in doubt, prefer clickable over static"，为中等模型提供明确的行动偏好
+3. 保底输出 —— 要求每个 widget 底部至少包含 2–3 个 follow-up 问题按钮，确保即使模型无法在节点级别做交互，用户仍有延展路径
+
 ---
 
 ## CDN 白名单

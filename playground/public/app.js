@@ -352,7 +352,7 @@
           if (!dataLine) continue;
 
           // Handle named events
-          if (eventType === 'modules') {
+          if (eventType === 'modules_used') {
             try { updateModulePills(JSON.parse(dataLine)); } catch (_) {}
             continue;
           }
@@ -859,7 +859,7 @@
   }
 
   function blockMarkdown(text) {
-    var lines = text.split('<br>');
+    var lines = text.split(/\n|<br>/);
     var out = [];
     var i = 0;
     while (i < lines.length) {
@@ -1271,6 +1271,13 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
     container.querySelectorAll('.subtask-widget').forEach(el => el.remove());
   }
 
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const message = input.value.trim();
@@ -1299,6 +1306,383 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
     switchSession(newSession.id);
   });
 
+  // --- Settings Modal ---
+  const settingsOverlay = document.getElementById('settingsOverlay');
+  const btnSettings = document.getElementById('btnSettings');
+  const btnCloseSettings = document.getElementById('btnCloseSettings');
+  const btnSaveSettings = document.getElementById('btnSaveSettings');
+  const btnAddCustom = document.getElementById('btnAddCustom');
+  const tabPresetEl = document.getElementById('tabPreset');
+  const tabCustomEl = document.getElementById('tabCustom');
+  const tabEnvfileEl = document.getElementById('tabEnvfile');
+  const customListEl = document.getElementById('customList');
+  const envEditor = document.getElementById('envEditor');
+  const btnSaveEnv = document.getElementById('btnSaveEnv');
+  const envSaveStatus = document.getElementById('envSaveStatus');
+
+  let settingsPresets = [];
+  let settingsCustom = [];
+  let settingsEnvCustom = [];
+  let settingsKeys = {};
+
+  function openSettings() {
+    settingsOverlay.hidden = false;
+    loadSettingsData();
+  }
+
+  function closeSettings() {
+    settingsOverlay.hidden = true;
+  }
+
+  async function loadSettingsData() {
+    try {
+      const res = await fetch('/api/all-providers');
+      const data = await res.json();
+      settingsPresets = data.presets || [];
+      settingsCustom = data.custom || [];
+      settingsEnvCustom = data.envCustom || [];
+      // Load saved keys
+      const customRes = await fetch('/api/custom-providers');
+      const customData = await customRes.json();
+      settingsKeys = customData.keys || {};
+      renderPresetTab();
+      renderCustomList();
+    } catch (err) {
+      tabPresetEl.innerHTML = '<p style="color:var(--text-secondary)">加载失败</p>';
+    }
+  }
+
+  function renderPresetTab() {
+    tabPresetEl.innerHTML = '';
+    settingsPresets.forEach((p) => {
+      const card = document.createElement('div');
+      card.className = 'provider-card';
+
+      const header = document.createElement('div');
+      header.className = 'provider-card-header';
+      const name = document.createElement('span');
+      name.className = 'provider-card-name';
+      name.textContent = p.name;
+      header.appendChild(name);
+
+      if (p.hasEnvKey) {
+        const badge = document.createElement('span');
+        badge.className = 'provider-card-badge env';
+        badge.textContent = '.env 已配置';
+        header.appendChild(badge);
+      } else if (p.hasSavedKey) {
+        const badge = document.createElement('span');
+        badge.className = 'provider-card-badge';
+        badge.textContent = '已保存 Key';
+        header.appendChild(badge);
+      }
+      card.appendChild(header);
+
+      const row = document.createElement('div');
+      row.className = 'provider-card-row';
+      const keyInput = document.createElement('input');
+      keyInput.type = 'password';
+      keyInput.className = 'provider-key-input';
+      keyInput.placeholder = p.hasEnvKey ? '已通过 .env 配置，可留空' : '输入 API Key';
+      keyInput.value = settingsKeys[p.id] || '';
+      keyInput.dataset.providerId = p.id;
+      keyInput.addEventListener('input', () => {
+        settingsKeys[p.id] = keyInput.value.trim();
+      });
+      row.appendChild(keyInput);
+
+      const testBtn = document.createElement('button');
+      testBtn.type = 'button';
+      testBtn.className = 'btn-test';
+      testBtn.textContent = 'Test';
+      testBtn.addEventListener('click', () => {
+        const key = keyInput.value.trim() || (p.hasEnvKey ? '__ENV__' : '');
+        if (!key) { resultEl.textContent = '请先输入 API Key'; resultEl.className = 'test-result error'; return; }
+        runTest(testBtn, resultEl, {
+          type: p.type,
+          baseUrl: p.baseUrl || '',
+          apiKey: key,
+          model: (p.models && p.models[0]) || '',
+          providerId: p.id,
+        });
+      });
+      row.appendChild(testBtn);
+      card.appendChild(row);
+
+      const resultEl = document.createElement('div');
+      resultEl.className = 'test-result';
+      card.appendChild(resultEl);
+
+      tabPresetEl.appendChild(card);
+    });
+  }
+
+  function renderCustomList() {
+    customListEl.innerHTML = '';
+
+    // Render env-driven compat providers first (from .env, read-only)
+    settingsEnvCustom.forEach((ep) => {
+      const item = document.createElement('div');
+      item.className = 'custom-list-item';
+
+      const info = document.createElement('div');
+      info.className = 'custom-list-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'custom-list-name';
+      nameEl.textContent = ep.name;
+      info.appendChild(nameEl);
+      const modelsEl = document.createElement('div');
+      modelsEl.className = 'custom-list-models';
+      modelsEl.textContent = (ep.models || []).join(', ');
+      info.appendChild(modelsEl);
+      item.appendChild(info);
+
+      const badge = document.createElement('span');
+      badge.className = 'provider-card-badge env';
+      badge.textContent = '.env';
+      badge.style.flexShrink = '0';
+
+      const resultEl = document.createElement('div');
+      resultEl.className = 'test-result';
+      resultEl.style.marginTop = '0';
+      resultEl.style.marginRight = '0.5rem';
+
+      const testBtn = document.createElement('button');
+      testBtn.type = 'button';
+      testBtn.className = 'btn-test';
+      testBtn.textContent = 'Test';
+      testBtn.addEventListener('click', () => {
+        runTest(testBtn, resultEl, {
+          type: ep.type,
+          baseUrl: ep.baseUrl,
+          apiKey: '__USE_ENV__',
+          model: (ep.models && ep.models[0]) || '',
+          providerId: ep.id,
+        });
+      });
+
+      item.appendChild(resultEl);
+      item.appendChild(testBtn);
+      item.appendChild(badge);
+      customListEl.appendChild(item);
+    });
+
+    // Render user-added custom providers
+    settingsCustom.forEach((cp, idx) => {
+      const item = document.createElement('div');
+      item.className = 'custom-list-item';
+
+      const info = document.createElement('div');
+      info.className = 'custom-list-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'custom-list-name';
+      nameEl.textContent = cp.name;
+      info.appendChild(nameEl);
+      const modelsEl = document.createElement('div');
+      modelsEl.className = 'custom-list-models';
+      modelsEl.textContent = (cp.models || []).join(', ');
+      info.appendChild(modelsEl);
+      item.appendChild(info);
+
+      const resultEl = document.createElement('div');
+      resultEl.className = 'test-result';
+      resultEl.style.marginTop = '0';
+      resultEl.style.marginRight = '0.5rem';
+
+      const testBtn = document.createElement('button');
+      testBtn.type = 'button';
+      testBtn.className = 'btn-test';
+      testBtn.textContent = 'Test';
+      testBtn.addEventListener('click', () => {
+        runTest(testBtn, resultEl, {
+          type: cp.type || 'openai',
+          baseUrl: cp.baseUrl,
+          apiKey: cp.apiKey,
+          model: (cp.models && cp.models[0]) || '',
+        });
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-delete-custom';
+      delBtn.textContent = '删除';
+      delBtn.addEventListener('click', () => {
+        settingsCustom.splice(idx, 1);
+        renderCustomList();
+      });
+
+      item.appendChild(resultEl);
+      item.appendChild(testBtn);
+      item.appendChild(delBtn);
+      customListEl.appendChild(item);
+    });
+
+    if (!settingsEnvCustom.length && !settingsCustom.length) {
+      customListEl.innerHTML = '<p style="color:var(--text-secondary);font-size:0.8rem">暂无自定义 Provider</p>';
+    }
+  }
+
+  async function runTest(btn, resultEl, params) {
+    btn.disabled = true;
+    btn.classList.add('testing');
+    btn.textContent = '测试中';
+    resultEl.textContent = '';
+    resultEl.className = 'test-result';
+
+    try {
+      const body = {
+        type: params.type,
+        baseUrl: params.baseUrl,
+        apiKey: params.apiKey,
+        model: params.model,
+      };
+      if (params.providerId) body.providerId = params.providerId;
+      // For preset providers using .env key, tell server to use env key
+      if (params.apiKey === '__ENV__') {
+        body.apiKey = '__USE_ENV__';
+      }
+      const res = await fetch('/api/test-provider', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        resultEl.className = 'test-result success';
+        resultEl.textContent = `✅ 已连通 · ${data.latencyMs}ms`;
+        btn.textContent = 'Test ✓';
+      } else {
+        resultEl.className = 'test-result error';
+        resultEl.textContent = `❌ ${data.message || '连接失败'}`;
+        btn.textContent = 'Test';
+      }
+    } catch (err) {
+      resultEl.className = 'test-result error';
+      resultEl.textContent = `❌ 请求失败`;
+      btn.textContent = 'Test';
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('testing');
+    }
+  }
+
+  // Tab switching
+  const tabMap = { preset: tabPresetEl, custom: tabCustomEl, envfile: tabEnvfileEl };
+  document.querySelectorAll('.settings-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tabMap[tab.dataset.tab];
+      if (target) target.classList.add('active');
+      if (tab.dataset.tab === 'envfile') loadEnvFile();
+    });
+  });
+
+  // .env file editor
+  async function loadEnvFile() {
+    envEditor.value = '';
+    envEditor.placeholder = '加载中...';
+    envSaveStatus.textContent = '';
+    try {
+      const res = await fetch('/api/env');
+      const data = await res.json();
+      envEditor.value = data.content || '';
+      envEditor.placeholder = '# 在此编辑 .env 文件内容';
+    } catch (err) {
+      envEditor.placeholder = '加载失败';
+    }
+  }
+
+  btnSaveEnv.addEventListener('click', async () => {
+    btnSaveEnv.disabled = true;
+    btnSaveEnv.textContent = '保存中...';
+    envSaveStatus.textContent = '';
+    try {
+      const res = await fetch('/api/env', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: envEditor.value }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        envSaveStatus.textContent = '已保存，环境变量已热重载';
+        envSaveStatus.style.color = '#0f6e56';
+        // Refresh providers since env may have changed
+        await fetchProviders();
+        fillProviderSelect();
+        const session = getCurrentSession();
+        if (session) syncProviderModelFromSession(session);
+      } else {
+        envSaveStatus.textContent = '保存失败: ' + (data.error || '');
+        envSaveStatus.style.color = '#a32d2d';
+      }
+    } catch (err) {
+      envSaveStatus.textContent = '保存失败';
+      envSaveStatus.style.color = '#a32d2d';
+    } finally {
+      btnSaveEnv.disabled = false;
+      btnSaveEnv.textContent = '保存 .env';
+    }
+  });
+
+  // Add custom provider
+  btnAddCustom.addEventListener('click', () => {
+    const name = document.getElementById('cfName').value.trim();
+    const type = document.getElementById('cfType').value;
+    const baseUrl = document.getElementById('cfBaseUrl').value.trim();
+    const apiKey = document.getElementById('cfApiKey').value.trim();
+    const modelsRaw = document.getElementById('cfModels').value.trim();
+    if (!name || !baseUrl || !apiKey || !modelsRaw) {
+      alert('请填写所有字段');
+      return;
+    }
+    const models = modelsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+    settingsCustom.push({ id, name, type, baseUrl, apiKey, models });
+    renderCustomList();
+    // Clear form
+    document.getElementById('cfName').value = '';
+    document.getElementById('cfBaseUrl').value = '';
+    document.getElementById('cfApiKey').value = '';
+    document.getElementById('cfModels').value = '';
+  });
+
+  // Save settings
+  btnSaveSettings.addEventListener('click', async () => {
+    btnSaveSettings.disabled = true;
+    btnSaveSettings.textContent = '保存中...';
+    try {
+      // Clean empty keys
+      const cleanKeys = {};
+      for (const [k, v] of Object.entries(settingsKeys)) {
+        if (v && v.trim()) cleanKeys[k] = v.trim();
+      }
+      await fetch('/api/custom-providers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keys: cleanKeys, custom: settingsCustom }),
+      });
+      // Refresh provider list
+      await fetchProviders();
+      fillProviderSelect();
+      const session = getCurrentSession();
+      if (session) syncProviderModelFromSession(session);
+      closeSettings();
+    } catch (err) {
+      alert('保存失败: ' + err.message);
+    } finally {
+      btnSaveSettings.disabled = false;
+      btnSaveSettings.textContent = '保存';
+    }
+  });
+
+  btnSettings.addEventListener('click', openSettings);
+  btnCloseSettings.addEventListener('click', closeSettings);
+  settingsOverlay.addEventListener('click', (e) => {
+    if (e.target === settingsOverlay) closeSettings();
+  });
+
   (async function init() {
     await fetchProviders();
     fillProviderSelect();
@@ -1307,7 +1691,8 @@ body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color
       createSession();
     }
     if (!currentSessionId && sessions.length) {
-      currentSessionId = sessions[0].id;
+      const latest = [...sessions].sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))[0];
+      currentSessionId = latest.id;
     }
     if (!currentSessionId) {
       const s = createSession();

@@ -20,7 +20,7 @@
     "type": "openai",
     "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
     "apiKeyEnv": "GOOGLE_API_KEY",
-    "models": ["gemini-3.1-pro-preview", "gemini-3-flash"]
+    "models": ["gemini-3.1-pro-preview"]
   },
   {
     "id": "minimax",

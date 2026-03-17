@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { searchWeb } from './lib/search.js';
@@ -22,16 +22,41 @@ function log(...args) {
   console.log(`[${ts()}]`, ...args);
 }
 const PROVIDERS_PATH = join(__dirname, 'providers.json');
+const CUSTOM_PROVIDERS_PATH = join(__dirname, 'custom-providers.json');
+
+function loadCustomProviders() {
+  if (!existsSync(CUSTOM_PROVIDERS_PATH)) return { keys: {}, custom: [] };
+  try {
+    return JSON.parse(readFileSync(CUSTOM_PROVIDERS_PATH, 'utf8'));
+  } catch (_) {
+    return { keys: {}, custom: [] };
+  }
+}
+
+function saveCustomProviders(data) {
+  writeFileSync(CUSTOM_PROVIDERS_PATH, JSON.stringify(data, null, 2), 'utf8');
+}
 
 function loadProviders() {
   const raw = readFileSync(PROVIDERS_PATH, 'utf8');
   const providers = JSON.parse(raw);
+  const customData = loadCustomProviders();
 
   // Resolve modelsEnv: providers that read model list from env (e.g. OpenRouter)
   for (const p of providers) {
     if (p.modelsEnv && !p.models) {
       const envVal = process.env[p.modelsEnv];
       p.models = envVal ? envVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+    }
+  }
+
+  // Apply frontend-provided API keys for preset providers
+  for (const p of providers) {
+    if (customData.keys[p.id]) {
+      // Store in process.env so getAvailableProviders() picks it up
+      if (!process.env[p.apiKeyEnv]) {
+        process.env[p.apiKeyEnv] = customData.keys[p.id];
+      }
     }
   }
 
@@ -63,6 +88,21 @@ function loadProviders() {
       apiKeyEnv: 'OPENAI_COMPAT_API_KEY',
       models: ocModels.split(',').map(s => s.trim()).filter(Boolean),
     });
+  }
+
+  // Append user-defined custom providers
+  for (const cp of customData.custom || []) {
+    providers.push({
+      id: cp.id,
+      name: cp.name,
+      type: cp.type || 'openai',
+      baseUrl: cp.baseUrl,
+      apiKeyEnv: `__CUSTOM_${cp.id}`,
+      models: cp.models || [],
+      _customApiKey: cp.apiKey,
+    });
+    // Inject key into process.env for getAvailableProviders()
+    if (cp.apiKey) process.env[`__CUSTOM_${cp.id}`] = cp.apiKey;
   }
 
   return providers;
@@ -128,6 +168,190 @@ app.get('/api/providers', (req, res) => {
   }
 });
 
+// Return ALL preset providers (including those without keys) for settings UI
+app.get('/api/all-providers', (req, res) => {
+  try {
+    const raw = readFileSync(PROVIDERS_PATH, 'utf8');
+    const presets = JSON.parse(raw);
+    const customData = loadCustomProviders();
+
+    // Resolve modelsEnv for display
+    for (const p of presets) {
+      if (p.modelsEnv && !p.models) {
+        const envVal = process.env[p.modelsEnv];
+        p.models = envVal ? envVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+      }
+    }
+
+    const result = presets.map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      apiKeyEnv: p.apiKeyEnv,
+      baseUrl: p.baseUrl || '',
+      models: p.models || [],
+      hasEnvKey: !!(process.env[p.apiKeyEnv] && process.env[p.apiKeyEnv].trim()),
+      hasSavedKey: !!customData.keys[p.id],
+    }));
+
+    // Also include env-driven compat providers (Anthropic compat, OpenAI compat)
+    const envCompat = [];
+    const acKey = process.env.ANTHROPIC_COMPAT_API_KEY;
+    const acUrl = process.env.ANTHROPIC_COMPAT_BASE_URL;
+    const acModels = process.env.ANTHROPIC_COMPAT_MODELS;
+    if (acUrl && acModels) {
+      envCompat.push({
+        id: 'anthropic-compat',
+        name: process.env.ANTHROPIC_COMPAT_NAME || 'Anthropic 兼容',
+        type: 'anthropic',
+        apiKeyEnv: 'ANTHROPIC_COMPAT_API_KEY',
+        baseUrl: acUrl,
+        models: acModels.split(',').map(s => s.trim()).filter(Boolean),
+        hasEnvKey: !!(acKey && acKey.trim()),
+        hasSavedKey: !!customData.keys['anthropic-compat'],
+      });
+    }
+    const ocKey = process.env.OPENAI_COMPAT_API_KEY;
+    const ocUrl = process.env.OPENAI_COMPAT_BASE_URL;
+    const ocModels = process.env.OPENAI_COMPAT_MODELS;
+    if (ocUrl && ocModels) {
+      envCompat.push({
+        id: 'openai-compat',
+        name: process.env.OPENAI_COMPAT_NAME || 'OpenAI 兼容',
+        type: 'openai',
+        apiKeyEnv: 'OPENAI_COMPAT_API_KEY',
+        baseUrl: ocUrl,
+        models: ocModels.split(',').map(s => s.trim()).filter(Boolean),
+        hasEnvKey: !!(ocKey && ocKey.trim()),
+        hasSavedKey: !!customData.keys['openai-compat'],
+      });
+    }
+
+    res.json({ presets: result, custom: customData.custom || [], envCustom: envCompat });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.get('/api/custom-providers', (req, res) => {
+  try {
+    const data = loadCustomProviders();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post('/api/custom-providers', (req, res) => {
+  try {
+    const { keys, custom } = req.body;
+    const data = loadCustomProviders();
+    if (keys && typeof keys === 'object') data.keys = { ...data.keys, ...keys };
+    if (Array.isArray(custom)) data.custom = custom;
+    saveCustomProviders(data);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+const ENV_PATH = join(__dirname, '.env');
+
+app.get('/api/env', (req, res) => {
+  try {
+    const content = existsSync(ENV_PATH) ? readFileSync(ENV_PATH, 'utf8') : '';
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post('/api/env', (req, res) => {
+  try {
+    const { content } = req.body;
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'content must be a string' });
+    }
+    writeFileSync(ENV_PATH, content, 'utf8');
+    // Reload env vars into process.env
+    dotenv.config({ path: ENV_PATH, override: true });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post('/api/test-provider', async (req, res) => {
+  let { type, baseUrl, apiKey, model, providerId } = req.body;
+  if (!model) {
+    return res.status(400).json({ ok: false, message: '需要提供模型名称' });
+  }
+  // Resolve env-based key for preset providers
+  if (apiKey === '__USE_ENV__' && providerId) {
+    // Search in all providers (including env-driven compat providers)
+    const all = loadProviders();
+    const provider = all.find(p => p.id === providerId);
+    if (provider) {
+      const envKey = process.env[provider.apiKeyEnv] || provider._customApiKey;
+      if (envKey) {
+        apiKey = envKey;
+        if (!type) type = provider.type;
+        if (!baseUrl && provider.baseUrl) baseUrl = provider.baseUrl;
+      } else {
+        return res.status(400).json({ ok: false, message: 'ENV 中未找到对应 API Key' });
+      }
+    } else {
+      return res.status(400).json({ ok: false, message: '未找到对应 Provider' });
+    }
+  }
+  if (!apiKey) {
+    return res.status(400).json({ ok: false, message: '需要提供 API Key' });
+  }
+  const start = Date.now();
+  try {
+    if (type === 'anthropic') {
+      const client = new Anthropic(baseUrl ? { apiKey, baseURL: baseUrl } : { apiKey });
+      const resp = await client.messages.create({
+        model, max_tokens: 10,
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
+      const latencyMs = Date.now() - start;
+      const text = resp.content?.map(b => b.text || '').join('') || '';
+      res.json({ ok: true, latencyMs, message: `连通正常`, reply: text.slice(0, 50) });
+    } else {
+      // OpenAI-compatible
+      const url = `${(baseUrl || '').replace(/\/$/, '')}/chat/completions`;
+      const extraHeaders = providerId ? getProviderHeaders(providerId) : {};
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          ...extraHeaders,
+        },
+        body: JSON.stringify({
+          model, max_tokens: 10,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
+      });
+      const latencyMs = Date.now() - start;
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '');
+        throw new Error(`${resp.status} ${errText.slice(0, 200)}`);
+      }
+      const data = await resp.json();
+      const text = data.choices?.[0]?.message?.content || '';
+      res.json({ ok: true, latencyMs, message: `连通正常`, reply: text.slice(0, 50) });
+    }
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    const msg = (err.message || String(err))
+      .replace(/\b[A-Za-z0-9_-]{20,}\b/g, '[REDACTED]')
+      .replace(/\bsk-[A-Za-z0-9_-]+/g, 'sk-[REDACTED]');
+    res.json({ ok: false, latencyMs, message: msg.slice(0, 300) });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
   const { provider: providerId, model, messages = [], searchEnabled = false } = req.body;
   const modules = Object.keys(MODULE_FILES);
@@ -158,9 +382,6 @@ app.post('/api/chat', async (req, res) => {
 
   // Disable Nagle algorithm so small SSE chunks are sent immediately
   if (res.socket) res.socket.setNoDelay(true);
-
-  // Tell frontend which modules were loaded
-  res.write(`event: modules\ndata: ${JSON.stringify(modules)}\n\n`);
 
   let chunkCount = 0;
   const sendChunk = (text) => {
@@ -665,6 +886,16 @@ app.post('/api/chat', async (req, res) => {
         }
       }
     }
+
+    // Detect which guideline modules were actually used in the output
+    const finalContent = fullStreamedText || '';
+    const usedModules = ['core']; // core is always considered used
+    if (/<svg[\s>]/i.test(finalContent)) usedModules.push('diagram');
+    if (/new\s+Chart\s*\(|chart\.js|<canvas/i.test(finalContent)) usedModules.push('chart');
+    if (/onclick\s*=|oninput\s*=|onchange\s*=|addEventListener/i.test(finalContent)) usedModules.push('interactive');
+    if (/mockup|prototype|wireframe|app-screen|phone-frame/i.test(finalContent)) usedModules.push('mockup');
+    if (/illustration|artistic|organic.*path|pattern.*fill|gradient.*stop/i.test(finalContent)) usedModules.push('art');
+    res.write(`event: modules_used\ndata: ${JSON.stringify([...new Set(usedModules)])}\n\n`);
 
     res.write('data: [DONE]\n\n');
   } catch (err) {
