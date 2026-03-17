@@ -36,6 +36,12 @@ describe('loadSystemPrompt', () => {
     assert.ok(text.includes('Flowchart') || text.includes('flowchart') || text.includes('diagram'));
   });
 
+  it('preserves the structural diagram container rounding exception', () => {
+    const text = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, ['core', 'diagram']);
+    assert.ok(text.includes('Do not use `rx="16"` for the outermost container'));
+    assert.ok(text.includes('outermost container `rx="20-24"`'));
+  });
+
   it('auto-prepends core when missing', () => {
     const text = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, ['diagram']);
     // Should still contain core content

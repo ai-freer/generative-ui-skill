@@ -62,7 +62,7 @@ Before placing text in a box, check: does (text width + 2×padding) fit the cont
 
 **Connector paths need `fill="none"`.** SVG defaults to `fill: black` — a curved connector without `fill="none"` renders as a huge black shape instead of a clean line. Every `<path>` or `<polyline>` used as a connector/arrow MUST have `fill="none"`. Only set fill on shapes meant to be filled (rects, circles, polygons).
 
-**Rect rounding:** `rx="4"` for subtle corners. `rx="8"` max for emphasized rounding. `rx` ≥ half the height = pill shape — deliberate only.
+**Rect rounding:** For ordinary nodes, `rx="4"` for subtle corners and `rx="8"` max for emphasized rounding. Structural diagrams are the explicit exception: outermost container `rx="20-24"`, inner regions `rx="8-12"`. Do not default structural outer containers to 16 or reuse HTML card radius tokens. `rx` ≥ half the height = pill shape — deliberate only.
 
 **Schematic containers use dashed rects with a label.** Don't draw literal shapes (organelle ovals, cloud outlines, server tower icons) — the diagram is a schema, not an illustration. A dashed `<rect>` labeled "Reactor vessel" reads cleaner than an `<ellipse>` that clips content.
 

@@ -179,6 +179,8 @@ For concepts where physical or logical containment matters — things inside oth
 
 **Core idea**: Large rounded rects are containers. Smaller rects inside them are regions or sub-structures. Text labels describe what happens in each region. Arrows show flow between regions or from external inputs/outputs.
 
+**Important exception to the global SVG rounding rule**: structural diagrams need a visibly softer outer envelope than ordinary nodes. The outermost container must use `rx="20-24"` even though generic SVG boxes default to smaller radii. Do not use `rx="16"` for the outermost container — it reads like a generic card instead of a containing region.
+
 **Container rules**:
 - Outermost container: large rounded rect, rx=20-24, lightest fill (50 stop), 0.5px stroke (600 stop). Label at top-left inside, 14px bold.
 - Inner regions: medium rounded rects, rx=8-12, next shade fill (100-200 stop). Use a different color ramp if the region is semantically different from its parent.
