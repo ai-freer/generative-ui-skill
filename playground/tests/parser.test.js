@@ -128,6 +128,35 @@ describe('blockMarkdown', () => {
   it('passes through plain text unchanged', () => {
     assert.equal(blockMarkdown('hello world'), 'hello world');
   });
+  it('converts a simple markdown table', () => {
+    const input = '| Name | Age |<br>|---|---|<br>| Alice | 30 |<br>| Bob | 25 |';
+    const html = blockMarkdown(input);
+    assert.ok(html.includes('<table class="md-table">'));
+    assert.ok(html.includes('<th'));
+    assert.ok(html.includes('Name'));
+    assert.ok(html.includes('Age'));
+    assert.ok(html.includes('<td'));
+    assert.ok(html.includes('Alice'));
+    assert.ok(html.includes('Bob'));
+  });
+  it('respects table column alignment', () => {
+    const input = '| Left | Center | Right |<br>|:---|:---:|---:|<br>| a | b | c |';
+    const html = blockMarkdown(input);
+    assert.ok(html.includes('text-align:left'));
+    assert.ok(html.includes('text-align:center'));
+    assert.ok(html.includes('text-align:right'));
+  });
+  it('applies inline formatting inside table cells', () => {
+    const input = '| Key | Value |<br>|---|---|<br>| **bold** | `code` |';
+    const html = blockMarkdown(input);
+    assert.ok(html.includes('<strong>bold</strong>'));
+    assert.ok(html.includes('<code>code</code>'));
+  });
+  it('does not treat a single pipe line as a table', () => {
+    const input = '| not a table |';
+    const html = blockMarkdown(input);
+    assert.ok(!html.includes('<table'));
+  });
 });
 
 describe('isShowWidgetFence', () => {

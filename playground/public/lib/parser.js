@@ -22,7 +22,7 @@ function inlineMarkdown(s) {
 }
 
 function blockMarkdown(text) {
-  var lines = text.split('<br>');
+  var lines = text.split(/\n|<br>/);
   var out = [];
   var i = 0;
   while (i < lines.length) {
@@ -62,6 +62,43 @@ function blockMarkdown(text) {
       }
       out.push('<ol>' + olItems.join('') + '</ol>');
       continue;
+    }
+    // Markdown pipe table
+    if (/^\|.+\|/.test(line)) {
+      var headerCells = line.split('|').slice(1, -1).map(function(c) { return c.trim(); });
+      // Check next line is separator (|---|---|)
+      if (i + 1 < lines.length && /^\|[\s:-]+\|/.test(lines[i + 1])) {
+        var sepCells = lines[i + 1].split('|').slice(1, -1);
+        var aligns = sepCells.map(function(c) {
+          c = c.trim();
+          if (c.startsWith(':') && c.endsWith(':')) return 'center';
+          if (c.endsWith(':')) return 'right';
+          return 'left';
+        });
+        i += 2; // skip header + separator
+        var rows = [];
+        while (i < lines.length && /^\|.+\|/.test(lines[i])) {
+          rows.push(lines[i].split('|').slice(1, -1).map(function(c) { return c.trim(); }));
+          i++;
+        }
+        var html = '<table class="md-table"><thead><tr>';
+        headerCells.forEach(function(c, idx) {
+          var a = aligns[idx] || 'left';
+          html += '<th style="text-align:' + a + '">' + inlineFmt(c) + '</th>';
+        });
+        html += '</tr></thead><tbody>';
+        rows.forEach(function(row) {
+          html += '<tr>';
+          row.forEach(function(c, idx) {
+            var a = aligns[idx] || 'left';
+            html += '<td style="text-align:' + a + '">' + inlineFmt(c) + '</td>';
+          });
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+        out.push(html);
+        continue;
+      }
     }
     var bqMatch = line.match(/^&gt;\s?(.*)$/);
     if (bqMatch) {
