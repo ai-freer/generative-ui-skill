@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "dev": "node server.mjs"
+    "dev": "node server.mjs",
+    "test": "node --test tests/parser.test.js tests/search.test.js tests/prompt.test.js tests/structural-diagram.test.js tests/e2e.test.js tests/widget-render.test.js tests/planner.test.js",
+    "test:unit": "node --test tests/parser.test.js tests/search.test.js tests/prompt.test.js tests/structural-diagram.test.js tests/planner.test.js",
+    "test:e2e": "node --test tests/e2e.test.js tests/widget-render.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "dotenv": "^16.4.5",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "openai": "^6.29.0"
   }
 }

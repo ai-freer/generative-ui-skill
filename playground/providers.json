@@ -1,0 +1,73 @@
+[
+  {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "type": "anthropic",
+    "apiKeyEnv": "ANTHROPIC_API_KEY",
+    "models": ["claude-opus-4-6", "claude-sonnet-4-6"]
+  },
+  {
+    "id": "openai",
+    "name": "OpenAI",
+    "type": "openai",
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "models": ["gpt-5.4", "gpt-5.2", "gpt-5.3-codex"]
+  },
+  {
+    "id": "google",
+    "name": "Google Gemini",
+    "type": "openai",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "apiKeyEnv": "GOOGLE_API_KEY",
+    "models": ["gemini-3.1-pro-preview"]
+  },
+  {
+    "id": "minimax",
+    "name": "MiniMax",
+    "type": "openai",
+    "baseUrl": "https://api.minimax.io/v1",
+    "apiKeyEnv": "MINIMAX_API_KEY",
+    "models": ["MiniMax-M2.5", "MiniMax-M2.5-highspeed"]
+  },
+  {
+    "id": "openrouter",
+    "name": "OpenRouter",
+    "type": "openai",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "apiKeyEnv": "OPENROUTER_API_KEY",
+    "modelsEnv": "OPENROUTER_MODELS"
+  },
+  {
+    "id": "kimi",
+    "name": "Kimi (Moonshot)",
+    "type": "openai",
+    "baseUrl": "https://api.moonshot.cn/v1",
+    "apiKeyEnv": "KIMI_API_KEY",
+    "models": ["kimi-k2.5"]
+  },
+  {
+    "id": "kimi-coding",
+    "name": "Kimi Coding",
+    "type": "openai",
+    "baseUrl": "https://api.kimi.com/coding/v1",
+    "apiKeyEnv": "KIMI_CODING_API_KEY",
+    "models": ["kimi-k2.5"]
+  },
+  {
+    "id": "zhipu",
+    "name": "智谱 GLM",
+    "type": "openai",
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+    "apiKeyEnv": "ZHIPU_API_KEY",
+    "models": ["glm-5"]
+  },
+  {
+    "id": "volcengine",
+    "name": "火山引擎",
+    "type": "openai",
+    "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+    "apiKeyEnv": "VOLCENGINE_API_KEY",
+    "models": ["doubao-seed-2-0-pro-260215"]
+  }
+]

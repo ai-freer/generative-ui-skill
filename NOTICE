@@ -1,0 +1,54 @@
+Generative UI Skill
+Copyright 2026 Daniel Pan
+
+This product includes software developed by Daniel Pan.
+
+=========================================================================
+
+Third-party components and their licenses:
+
+=========================================================================
+
+pi-generative-ui
+https://github.com/Michaelliv/pi-generative-ui
+Copyright (c) 2026 Michaelliv
+Licensed under the MIT License
+
+The design guidelines in prompts/guidelines/ (core.md, color-palette.md,
+svg-setup.md, diagram.md, chart.md, ui-components.md, art.md) are derived
+from pi-generative-ui's guidelines.ts, which contains Anthropic's
+generative UI design specifications reverse-engineered from claude.ai.
+These guidelines have been adapted for use with the show-widget code fence
+format.
+
+MIT License:
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the "Software"),
+to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+=========================================================================
+
+Inspiration and references (no code reuse):
+
+=========================================================================
+
+@op7418 (歸藏)
+Article: 《我复刻了 Claude 刚发布的生成式 UI 交互！》
+https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g
+The code fence + sandbox iframe approach was inspired by the technical
+analysis in this article. No code was copied from the CodePilot project.

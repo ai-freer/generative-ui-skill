@@ -9,25 +9,118 @@
 <body>
   <header class="header">
     <h1>Generative UI Playground</h1>
-    <fieldset class="modules">
-      <legend>Guidelines 模块</legend>
-      <label><input type="checkbox" name="mod" value="core" checked /> core</label>
-      <label><input type="checkbox" name="mod" value="diagram" checked /> diagram</label>
-      <label><input type="checkbox" name="mod" value="chart" checked /> chart</label>
-      <label><input type="checkbox" name="mod" value="interactive" checked /> interactive</label>
-      <label><input type="checkbox" name="mod" value="mockup" checked /> mockup</label>
-      <label><input type="checkbox" name="mod" value="art" checked /> art</label>
-    </fieldset>
   </header>
 
-  <main class="main">
-    <div id="messages" class="messages"></div>
-    <form id="form" class="form">
-      <textarea id="input" class="input" rows="2" placeholder="输入测试 prompt，例如：解释 JWT 认证流程"></textarea>
-      <button type="submit" class="send">发送</button>
-    </form>
-  </main>
+  <div class="app-layout">
+    <aside class="sidebar sidebar-left" id="sidebarLeft">
+      <div class="sidebar-header">
+        <button type="button" class="btn-new-chat" id="btnNewChat">+ 新对话</button>
+      </div>
+      <nav class="session-list" id="sessionList" aria-label="会话列表">
+        <!-- sessions rendered by app.js -->
+      </nav>
+    </aside>
 
-  <script src="app.js"></script>
+    <main class="main">
+      <div id="messages" class="messages"></div>
+      <form id="form" class="form">
+        <div id="suggestionTags" class="suggestion-tags"></div>
+        <textarea id="input" class="input" rows="2" placeholder="输入测试 prompt"></textarea>
+        <button type="submit" class="send">发送</button>
+      </form>
+    </main>
+
+    <aside class="sidebar sidebar-right" id="sidebarRight">
+      <section class="sidebar-section">
+        <div class="sidebar-title-row">
+          <h2 class="sidebar-title">模型</h2>
+          <button type="button" class="btn-settings" id="btnSettings" aria-label="Provider 设置">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="8" r="2.5"></circle>
+              <path d="M13.3 10a1.2 1.2 0 0 0 .24 1.32l.04.04a1.44 1.44 0 1 1-2.04 2.04l-.04-.04a1.2 1.2 0 0 0-1.32-.24 1.2 1.2 0 0 0-.72 1.1v.12a1.44 1.44 0 1 1-2.88 0v-.06a1.2 1.2 0 0 0-.78-1.1 1.2 1.2 0 0 0-1.32.24l-.04.04a1.44 1.44 0 1 1-2.04-2.04l.04-.04A1.2 1.2 0 0 0 2.62 10a1.2 1.2 0 0 0-1.1-.72h-.12a1.44 1.44 0 0 1 0-2.88h.06a1.2 1.2 0 0 0 1.1-.78 1.2 1.2 0 0 0-.24-1.32l-.04-.04A1.44 1.44 0 1 1 4.32 2.22l.04.04a1.2 1.2 0 0 0 1.32.24h.06a1.2 1.2 0 0 0 .72-1.1v-.12a1.44 1.44 0 0 1 2.88 0v.06a1.2 1.2 0 0 0 .72 1.1 1.2 1.2 0 0 0 1.32-.24l.04-.04a1.44 1.44 0 1 1 2.04 2.04l-.04.04a1.2 1.2 0 0 0-.24 1.32v.06a1.2 1.2 0 0 0 1.1.72h.12a1.44 1.44 0 0 1 0 2.88h-.06a1.2 1.2 0 0 0-1.1.72Z"></path>
+            </svg>
+          </button>
+        </div>
+        <label class="sidebar-label">Provider</label>
+        <select id="providerSelect" class="sidebar-select" aria-label="选择 Provider"></select>
+        <label class="sidebar-label">Model</label>
+        <select id="modelSelect" class="sidebar-select" aria-label="选择模型"></select>
+        <p id="modelStatus" class="sidebar-status" aria-live="polite"></p>
+      </section>
+      <section class="sidebar-section">
+        <h2 class="sidebar-title">搜索</h2>
+        <label><input type="checkbox" id="searchToggle" checked /> 启用联网搜索</label>
+        <p id="searchStatus" class="sidebar-status"></p>
+      </section>
+      <section class="sidebar-section">
+        <h2 class="sidebar-title">Guidelines 模块</h2>
+        <div class="modules" id="modulePills">
+          <span class="mod-pill" data-mod="core">core</span>
+          <span class="mod-pill" data-mod="diagram">diagram</span>
+          <span class="mod-pill" data-mod="chart">chart</span>
+          <span class="mod-pill" data-mod="interactive">interactive</span>
+          <span class="mod-pill" data-mod="mockup">mockup</span>
+          <span class="mod-pill" data-mod="art">art</span>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="settings-overlay" id="settingsOverlay" hidden>
+    <div class="settings-modal" role="dialog" aria-label="Provider 设置">
+      <div class="settings-header">
+        <h2>Provider 设置</h2>
+        <button type="button" class="btn-close-settings" id="btnCloseSettings" aria-label="关闭">&times;</button>
+      </div>
+      <div class="settings-tabs">
+        <button type="button" class="settings-tab active" data-tab="preset">预制 Provider</button>
+        <button type="button" class="settings-tab" data-tab="custom">自定义 Provider</button>
+        <button type="button" class="settings-tab" data-tab="envfile">编辑 .env</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-tab-content active" id="tabPreset"></div>
+        <div class="settings-tab-content" id="tabCustom">
+          <div class="custom-form" id="customForm">
+            <label class="settings-label">显示名称
+              <input type="text" class="settings-input" id="cfName" placeholder="My DeepSeek" />
+            </label>
+            <label class="settings-label">协议类型
+              <select class="settings-input" id="cfType">
+                <option value="openai">OpenAI 兼容</option>
+                <option value="anthropic">Anthropic 兼容</option>
+              </select>
+            </label>
+            <label class="settings-label">Base URL
+              <input type="text" class="settings-input" id="cfBaseUrl" placeholder="https://api.deepseek.com/v1" />
+            </label>
+            <label class="settings-label">API Key
+              <input type="password" class="settings-input" id="cfApiKey" placeholder="sk-..." />
+            </label>
+            <label class="settings-label">模型列表 <span class="settings-hint">逗号分隔</span>
+              <input type="text" class="settings-input" id="cfModels" placeholder="deepseek-chat, deepseek-reasoner" />
+            </label>
+            <div class="custom-form-actions">
+              <button type="button" class="btn-add-custom" id="btnAddCustom">添加</button>
+            </div>
+          </div>
+          <div class="custom-list" id="customList"></div>
+        </div>
+        <div class="settings-tab-content" id="tabEnvfile">
+          <p class="env-hint">直接编辑 <code>.env</code> 文件内容，保存后需重启服务生效。</p>
+          <textarea class="env-editor" id="envEditor" spellcheck="false" placeholder="加载中..."></textarea>
+          <div class="env-actions">
+            <button type="button" class="btn-save-env" id="btnSaveEnv">保存 .env</button>
+            <span class="env-save-status" id="envSaveStatus"></span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-footer">
+        <button type="button" class="btn-save-settings" id="btnSaveSettings">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
 </body>
 </html>
