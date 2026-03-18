@@ -110,7 +110,7 @@ Claude 原生用 `show_widget` tool call，但我们选择代码围栏：
 
 **为什么支持双渲染模式？**
 
-Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），CodePilot 用 sandbox iframe（安全但有性能开销）。我们同时支持两种模式：
+根据 `pi-generative-ui` 对 Claude.ai 原生实现的逆向研究，流式阶段采用 morphdom 直接 DOM 注入可以获得更强的“逐步长出”体验；这也是我们最主要的技术参考来源。与此同时，`CodePilot` 的文章与公开实现让我们更早意识到“代码围栏触发 + iframe 隔离”这条工程方向可行。我们在 M1 playground 中以 `pi-generative-ui` 为主参考，吸收少量工程启发，形成自己的双模式与三阶段流水线设计：
 - **iframe 模式**：适合不可信环境（第三方集成、公开 chat），完全隔离
 - **morphdom 模式**：适合可信环境（自有产品），更流畅的渲染体验
 
@@ -138,7 +138,7 @@ Claude 原生用 morphdom 直接 DOM 注入（性能好但安全依赖 CSP），
 
 ### 核心架构：三阶段渲染流水线
 
-M1 playground 验证了一种比原 CodePilot 方案更优的渲染模型——不是 iframe 和 morphdom 二选一，而是**三阶段流水线**：
+M1 playground 验证了一种适合我们场景的渲染模型：不是 iframe 和 morphdom 二选一，而是**三阶段流水线**：
 
 ```
 Token 流入
@@ -217,7 +217,9 @@ packages/renderer/
 - 仅剥离嵌套/逃逸标签（防止 iframe 内嵌 iframe）
 - 保留 script 和 event handler（在 sandbox 内安全执行）
 
-参考实现：CodePilot `widget-sanitizer.ts`
+参考来源：
+- Claude 原生能力边界与流式体验参考 `pi-generative-ui`
+- 本项目实际实现与验证以 `playground/public/app.js` 为准
 
 #### 任务 3：streaming-preview — 流式 DOM 预览
 
@@ -407,7 +409,7 @@ renderer.parseAndRender(fullModelOutput);
 #### M2b — 安全 + 封装
 
 **Step 6: sanitizer.ts — 两阶段 HTML 清理**
-- 新建模块（参考 CodePilot widget-sanitizer.ts 设计）
+- 新建模块（沿用本项目已验证的两阶段清理思路，并对齐 Claude 原生能力边界）
 - `sanitizeForStreaming(html)` — 流式阶段：
   - 剥离：iframe / object / embed / form / meta / link / base
   - 剥离：所有 on* 事件处理器（正则匹配 `\bon\w+=`）
@@ -547,17 +549,22 @@ LLM 开始生成 show_widget tool call
 | 库支持 | 任意 CDN 白名单内的库，运行时下载 | 固定预置库集合 |
 | 生命周期 | 临时，绑定到消息 | 持久化，跨会话 |
 
-### CodePilot 方案
+### 本项目的工程化取舍
 
-CodePilot 采用了不同的技术路线：
+我们没有直接复刻 Claude.ai 原生实现，而是在 `pi-generative-ui` 揭示的原生机制基础上，结合自身 playground 验证结果，做了更适合通用宿主环境的设计。就真实开发参考价值而言，`pi-generative-ui` 更完整，也更接近我们后续的代码组织、模板规模和 GUI 交互目标；`CodePilot` 的公开文章和工程思路也提供了有价值的启发。
 
 **触发方式：代码围栏（文本流）**
 
-模型在 markdown 输出中使用 ` ```show-widget ` 围栏包裹 widget 代码，不依赖 tool_use 机制。
+模型在 markdown 输出中使用 ` ```show-widget ` 围栏包裹 widget 代码，不依赖特定 SDK 的 tool_use 机制，便于接入任意支持 markdown 输出的模型与流式通道。
 
-**渲染方式：sandbox iframe + CSP**
+**渲染方式：流式预览 + sandbox iframe 终态**
 
-使用 sandbox iframe 实现完全隔离的执行环境，通过 postMessage 实现父子通信。
+流式阶段尽量保留 Claude 原生的“边生成边可见”体验；终态阶段切换到 sandbox iframe，确保交互脚本与宿主环境隔离。
+
+这里的来源需要区分开写：
+- “原生对话内直接注入 DOM、morphdom 增量更新、script 在完成后执行”这一组结论，主要来自 `pi-generative-ui` 对 Claude.ai 的逆向结果
+- `CodePilot` 的实现方案，也提供了一些工程方向上的启发
+- 我们自己的方案则是把原生体验目标与更稳妥的宿主隔离方案合并到同一条流水线里
 
 **三层安全防护：**
 
@@ -582,13 +589,16 @@ iframe → 父页面:
 
 ### 方案对比
 
-| 维度 | Claude.ai 原生 | CodePilot | 本项目方案 |
-|------|---------------|-----------|-----------|
-| 触发 | `show_widget` tool call | ` ```show-widget ` 代码围栏 | 代码围栏（兼容任何 markdown 模型） |
-| 流式渲染 | morphdom DOM diffing，直接注入父 DOM | HTML 流 → sanitize → postMessage → iframe | 支持双模式：morphdom（性能）/ iframe（安全） |
-| 隔离 | CSP 限制 CDN 白名单 | sandbox iframe + CSP | 按场景选择隔离级别 |
-| 文档加载 | `read_me` 渐进加载 5 模块 | 静态注入简化版 prompt | 渐进加载（基于 Anthropic 原版指南） |
-| 模型依赖 | 仅限 Claude | 任何 markdown 模型 | 任何 markdown 模型 |
+这里的 `pi-generative-ui` 代表对 Claude.ai generative UI 机制的开源复现与扩展实现，因此它更适合作为我们进行横向比较的主要参照对象。
+
+| 维度 | pi-generative-ui | CodePilot | 本项目方案 |
+|------|------------------|-----------|-----------|
+| 触发 | `show_widget` tool call（复现原生协议） | ` ```show-widget ` 代码围栏 | 代码围栏（兼容任何 markdown 模型） |
+| 流式渲染 | morphdom DOM diffing + 原生窗口内流式更新 | iframe 驱动的流式渲染 | 三阶段流水线：文本 / 流式预览 / iframe 终态 |
+| 宿主环境 | pi / Glimpse / WKWebView 原生窗口 | 通用桌面/Web 聊天容器 | 通用 Web 宿主，默认 chat 容器集成 |
+| 隔离 | 依赖宿主 WebView 能力与原生窗口容器 | sandbox iframe + CSP | 按场景选择隔离级别，终态默认 sandbox iframe + CSP |
+| 文档加载 | 复现 `read_me` / guideline 按需加载 | 静态注入项目侧 guideline | 渐进加载（基于 Anthropic 原版指南） |
+| 模型依赖 | 依赖支持 tool call 的接入环境 | 任何 markdown 模型 | 任何 markdown 模型 |
 
 ---
 
@@ -596,13 +606,9 @@ iframe → 父页面:
 
 | 参考 | 内容 | 链接 |
 |------|------|------|
-| CodePilot 仓库 | 代码围栏 + iframe 完整实现 | https://github.com/op7418/CodePilot |
-| pi-generative-ui 仓库 | Claude 原生逆向 + morphdom 实现 + 完整设计指南 | https://github.com/Michaelliv/pi-generative-ui |
+| pi-generative-ui 仓库 | Claude 原生逆向、完整设计指南、GUI 级流式渲染实现；本项目的主要参考来源 | https://github.com/Michaelliv/pi-generative-ui |
 | 逆向工程文章 | show_widget / read_me / morphdom 技术细节 | https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/ |
 | Claude 设计指南原文 | guidelines.ts (~800 行) | https://github.com/Michaelliv/pi-generative-ui/blob/main/.pi/extensions/generative-ui/guidelines.ts |
-| CodePilot widget-sanitizer | 两阶段 HTML 清理 + receiver iframe | CodePilot `src/lib/widget-sanitizer.ts` |
-| CodePilot widget-css-bridge | CSS 变量桥接 + Tailwind 子集 | CodePilot `src/lib/widget-css-bridge.ts` |
-| CodePilot WidgetRenderer | iframe 渲染核心 | CodePilot `src/components/chat/WidgetRenderer.tsx` |
-| CodePilot StreamingMessage | 流式围栏检测 | CodePilot `src/components/chat/StreamingMessage.tsx` |
+| CodePilot 公众号文章 | 《我复刻了 Claude 刚发布的生成式 UI 交互！》；提供了代码围栏与 iframe 方向的早期启发 | https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g |
+| CodePilot 仓库 | 公众号文章与实现提供了部分工程方向上的启发 | https://github.com/op7418/CodePilot |
 | morphdom | DOM diffing 库 | https://github.com/patrick-steele-idem/morphdom |
-| **playground 原型** | **M1 期间验证的完整渲染流水线** | **`playground/public/app.js`** |
