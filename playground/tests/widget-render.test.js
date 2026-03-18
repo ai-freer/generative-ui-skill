@@ -64,6 +64,18 @@ describe('Widget examples — static checks', () => {
         // Allow a few — some examples may have fallback colors
         assert.ok(matches.length <= 3, `too many hardcoded colors in inline styles: ${matches.length}`);
       });
+
+      it('keeps 3D shell progressive-friendly when using Three.js', () => {
+        if (!content.includes('three.min.js') || !content.includes('OrbitControls.js')) {
+          assert.ok(true);
+          return;
+        }
+        const initCall = 'if (window.THREE && THREE.OrbitControls) init();';
+        const initCallIdx = content.indexOf(initCall);
+        assert.ok(initCallIdx !== -1, 'missing init() bootstrap line');
+        const afterInit = content.slice(initCallIdx + initCall.length);
+        assert.ok(afterInit.includes('scene.add('), 'expected scene content after init() for progressive rendering');
+      });
     });
   }
 });

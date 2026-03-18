@@ -511,15 +511,19 @@ describe('playground app regression', () => {
     assert.ok(!appJsSource.includes("const CDN_ORIGINS"));
   });
 
-  it('keeps only the 3D detection helper in app.js', () => {
+  it('imports progressive 3D helpers into app.js', () => {
     assert.ok(appJsSource.includes('detect3DWidget'));
-    assert.ok(appJsSource.includes('正在生成 3D 场景'));
-    assert.ok(!appJsSource.includes('earlyIframe'));
+    assert.ok(appJsSource.includes('detect3DShellComplete'));
+    assert.ok(appJsSource.includes('buildEarly3DShell'));
+    assert.ok(appJsSource.includes('extract3DInjectChunk'));
+    assert.ok(appJsSource.includes('extractCompleteStatements'));
   });
 
-  it('uses a stable placeholder instead of streaming 3D execution', () => {
-    assert.ok(appJsSource.includes('Conservative fallback: 3D widgets stay on a stable placeholder'));
+  it('keeps a placeholder until the 3D shell is streamable', () => {
     assert.ok(appJsSource.includes("state.placeholderEl.innerHTML = '<p class=\"typing\">正在生成 3D 场景…</p>'"));
+    assert.ok(appJsSource.includes('widget-3d-progressive'));
+    assert.ok(appJsSource.includes("type: 'injectCode'"));
+    assert.ok(appJsSource.includes("e.data?.type === 'widgetReady'"));
   });
 
   it('suspends widget iframes while streaming sessions are in background', () => {

@@ -27,10 +27,22 @@ canvas { display: block; width: 100% !important; height: 420px !important; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" onload="init()"></script>
 <script>
 var scene, camera, renderer, controls;
+var stages = [];
+var stageLabels = ['Milling', 'Mashing', 'Boiling', 'Fermenting'];
+var stageColors = [0x888780, 0xEF9F27, 0xD85A30, 0x1D9E75];
+var labelData = [];
+var step = 0, playing = false, timer = null;
+var raycaster = null;
+var mouse = null;
+var dragDist = 0, startX2 = 0, startY2 = 0;
+var labelWidth = 0, labelHeight = 420;
+var updateLabels = function() {};
 function init() {
   if (!window.THREE || !THREE.OrbitControls) return;
   var canvas = document.getElementById('c');
   var W = canvas.clientWidth, H = 420;
+  labelWidth = W;
+  labelHeight = H;
   renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
   renderer.setSize(W, H);
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -48,77 +60,8 @@ function init() {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.autoRotate = false;
-
-  var stages = [];
-  var stageLabels = ['Milling', 'Mashing', 'Boiling', 'Fermenting'];
-  var stageColors = [0x888780, 0xEF9F27, 0xD85A30, 0x1D9E75];
-  var labelData = [];
-
-  var objectRadius = 0.9;
-  var gap = objectRadius * 2 + 1.5;
-  var totalWidth = (stageLabels.length - 1) * gap;
-  var startX = -totalWidth / 2;
-
-  for (var i = 0; i < stageLabels.length; i++) {
-    var group = new THREE.Group();
-    var tankH = [1.6, 1.8, 2.0, 1.7][i];
-    var tank = new THREE.Mesh(
-      new THREE.CylinderGeometry(objectRadius, objectRadius, tankH, 16),
-      new THREE.MeshLambertMaterial({ color: stageColors[i] })
-    );
-    tank.position.y = tankH / 2;
-    tank.name = stageLabels[i];
-    group.add(tank);
-
-    var lid = new THREE.Mesh(
-      new THREE.CylinderGeometry(objectRadius + 0.1, objectRadius + 0.1, 0.12, 16),
-      new THREE.MeshLambertMaterial({ color: stageColors[i], transparent: true, opacity: 0.5 })
-    );
-    lid.position.y = tankH + 0.06;
-    group.add(lid);
-
-    var xPos = startX + i * gap;
-    group.position.set(xPos, 0, 0);
-    group.visible = false;
-    scene.add(group);
-    stages.push(group);
-
-    labelData.push({ obj: group, text: stageLabels[i], offsetY: tankH + 0.5 });
-  }
-
-  var step = 0, playing = false, timer;
-
-  function showStep(n) {
-    for (var i = 0; i < stages.length; i++) {
-      stages[i].visible = i <= n;
-    }
-    document.getElementById('step-label').textContent = stageLabels[n];
-  }
-
-  window.togglePlay = function() {
-    playing = !playing;
-    document.getElementById('btn').textContent = playing ? 'Pause' : 'Play';
-    if (playing) {
-      timer = setInterval(function() {
-        step = (step + 1) % stages.length;
-        showStep(step);
-      }, 2000);
-    } else {
-      clearInterval(timer);
-    }
-  };
-
-  window.resetView = function() {
-    camera.position.set(0, 5, 16);
-    camera.lookAt(0, 0, 0);
-    controls.update();
-  };
-
-  showStep(0);
-
-  var raycaster = new THREE.Raycaster();
-  var mouse = new THREE.Vector2();
-  var dragDist = 0, startX2 = 0, startY2 = 0;
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
 
   canvas.addEventListener('mousedown', function(e) { startX2 = e.clientX; startY2 = e.clientY; dragDist = 0; });
   canvas.addEventListener('mousemove', function(e) { dragDist += Math.abs(e.clientX - startX2) + Math.abs(e.clientY - startY2); });
@@ -137,24 +80,6 @@ function init() {
     }
   });
 
-  function updateLabels() {
-    var container = document.getElementById('labels');
-    container.innerHTML = '';
-    for (var i = 0; i < labelData.length; i++) {
-      var d = labelData[i];
-      if (!d.obj.visible) continue;
-      var pos = new THREE.Vector3(d.obj.position.x, d.offsetY, d.obj.position.z);
-      pos.project(camera);
-      if (pos.z > 1) continue;
-      var sx = (pos.x * 0.5 + 0.5) * W;
-      var sy = (-pos.y * 0.5 + 0.5) * H;
-      var el = document.createElement('div');
-      el.style.cssText = 'position:absolute;left:' + sx + 'px;top:' + sy + 'px;transform:translate(-50%,-100%);font-size:12px;color:var(--color-text-secondary);white-space:nowrap;pointer-events:none';
-      el.textContent = d.text;
-      container.appendChild(el);
-    }
-  }
-
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
@@ -164,4 +89,82 @@ function init() {
   animate();
 }
 if (window.THREE && THREE.OrbitControls) init();
+
+var objectRadius = 0.9;
+var gap = objectRadius * 2 + 1.5;
+var totalWidth = (stageLabels.length - 1) * gap;
+var startX = -totalWidth / 2;
+
+for (var i = 0; i < stageLabels.length; i++) {
+  var group = new THREE.Group();
+  var tankH = [1.6, 1.8, 2.0, 1.7][i];
+  var tank = new THREE.Mesh(
+    new THREE.CylinderGeometry(objectRadius, objectRadius, tankH, 16),
+    new THREE.MeshLambertMaterial({ color: stageColors[i] })
+  );
+  tank.position.y = tankH / 2;
+  tank.name = stageLabels[i];
+  group.add(tank);
+
+  var lid = new THREE.Mesh(
+    new THREE.CylinderGeometry(objectRadius + 0.1, objectRadius + 0.1, 0.12, 16),
+    new THREE.MeshLambertMaterial({ color: stageColors[i], transparent: true, opacity: 0.5 })
+  );
+  lid.position.y = tankH + 0.06;
+  group.add(lid);
+
+  var xPos = startX + i * gap;
+  group.position.set(xPos, 0, 0);
+  group.visible = false;
+  scene.add(group);
+  stages.push(group);
+
+  labelData.push({ obj: group, text: stageLabels[i], offsetY: tankH + 0.5 });
+}
+
+function showStep(n) {
+  for (var i = 0; i < stages.length; i++) {
+    stages[i].visible = i <= n;
+  }
+  document.getElementById('step-label').textContent = stageLabels[n];
+}
+
+window.togglePlay = function() {
+  playing = !playing;
+  document.getElementById('btn').textContent = playing ? 'Pause' : 'Play';
+  if (playing) {
+    timer = setInterval(function() {
+      step = (step + 1) % stages.length;
+      showStep(step);
+    }, 2000);
+  } else {
+    clearInterval(timer);
+  }
+};
+
+window.resetView = function() {
+  camera.position.set(0, 5, 16);
+  camera.lookAt(0, 0, 0);
+  controls.update();
+};
+
+updateLabels = function() {
+  var container = document.getElementById('labels');
+  container.innerHTML = '';
+  for (var i = 0; i < labelData.length; i++) {
+    var d = labelData[i];
+    if (!d.obj.visible) continue;
+    var pos = new THREE.Vector3(d.obj.position.x, d.offsetY, d.obj.position.z);
+    pos.project(camera);
+    if (pos.z > 1) continue;
+    var sx = (pos.x * 0.5 + 0.5) * labelWidth;
+    var sy = (-pos.y * 0.5 + 0.5) * labelHeight;
+    var el = document.createElement('div');
+    el.style.cssText = 'position:absolute;left:' + sx + 'px;top:' + sy + 'px;transform:translate(-50%,-100%);font-size:12px;color:var(--color-text-secondary);white-space:nowrap;pointer-events:none';
+    el.textContent = d.text;
+    container.appendChild(el);
+  }
+};
+
+showStep(0);
 </script>

@@ -19,6 +19,12 @@ canvas { display: block; width: 100% !important; height: 420px !important; }
 <script>
 var speedMul = 1;
 var scene, camera, renderer, controls;
+var earth, mars, jupiter;
+var clickTargets = [];
+var raycaster = null;
+var mouse = null;
+var dragDist = 0, startX = 0, startY = 0;
+var t = 0, playing = true;
 function init() {
   if (!window.THREE || !THREE.OrbitControls) return;
   var canvas = document.getElementById('c');
@@ -41,42 +47,8 @@ function init() {
   controls.dampingFactor = 0.08;
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.3;
-
-  var sunMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(1.2, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0xEF9F27 })
-  );
-  sunMesh.name = 'the Sun';
-  scene.add(sunMesh);
-
-  function makeOrbitRing(radius) {
-    var ring = new THREE.Mesh(
-      new THREE.RingGeometry(radius - 0.02, radius + 0.02, 64),
-      new THREE.MeshBasicMaterial({ color: 0x888780, side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    scene.add(ring);
-  }
-
-  function makePlanet(radius, color, orbitR, name) {
-    var mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(radius, 16, 12),
-      new THREE.MeshLambertMaterial({ color: color })
-    );
-    mesh.name = name;
-    scene.add(mesh);
-    makeOrbitRing(orbitR);
-    return mesh;
-  }
-
-  var earth = makePlanet(0.45, 0x378ADD, 4, 'Earth');
-  var mars = makePlanet(0.35, 0xD85A30, 6.5, 'Mars');
-  var jupiter = makePlanet(0.7, 0x7F77DD, 9.5, 'Jupiter');
-
-  var clickTargets = [sunMesh, earth, mars, jupiter];
-  var raycaster = new THREE.Raycaster();
-  var mouse = new THREE.Vector2();
-  var dragDist = 0, startX = 0, startY = 0;
+  raycaster = new THREE.Raycaster();
+  mouse = new THREE.Vector2();
 
   canvas.addEventListener('mousedown', function(e) { startX = e.clientX; startY = e.clientY; dragDist = 0; });
   canvas.addEventListener('mousemove', function(e) { dragDist += Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY); });
@@ -92,16 +64,9 @@ function init() {
     }
   });
 
-  var t = 0, playing = true;
-
-  window.togglePlay = function() {
-    playing = !playing;
-    document.getElementById('btn').textContent = playing ? 'Pause' : 'Play';
-  };
-
   function animate() {
     requestAnimationFrame(animate);
-    if (playing) {
+    if (playing && earth && mars && jupiter) {
       t += 0.005 * speedMul;
       earth.position.set(Math.cos(t * 1.0) * 4, 0, Math.sin(t * 1.0) * 4);
       mars.position.set(Math.cos(t * 0.53) * 6.5, 0, Math.sin(t * 0.53) * 6.5);
@@ -113,4 +78,41 @@ function init() {
   animate();
 }
 if (window.THREE && THREE.OrbitControls) init();
+
+function makeOrbitRing(radius) {
+  var ring = new THREE.Mesh(
+    new THREE.RingGeometry(radius - 0.02, radius + 0.02, 64),
+    new THREE.MeshBasicMaterial({ color: 0x888780, side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  scene.add(ring);
+}
+
+function makePlanet(radius, color, orbitR, name) {
+  var mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 16, 12),
+    new THREE.MeshLambertMaterial({ color: color })
+  );
+  mesh.name = name;
+  scene.add(mesh);
+  makeOrbitRing(orbitR);
+  return mesh;
+}
+
+var sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(1.2, 16, 12),
+  new THREE.MeshBasicMaterial({ color: 0xEF9F27 })
+);
+sunMesh.name = 'the Sun';
+scene.add(sunMesh);
+
+earth = makePlanet(0.45, 0x378ADD, 4, 'Earth');
+mars = makePlanet(0.35, 0xD85A30, 6.5, 'Mars');
+jupiter = makePlanet(0.7, 0x7F77DD, 9.5, 'Jupiter');
+clickTargets = [sunMesh, earth, mars, jupiter];
+
+window.togglePlay = function() {
+  playing = !playing;
+  document.getElementById('btn').textContent = playing ? 'Pause' : 'Play';
+};
 </script>
