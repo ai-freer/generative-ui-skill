@@ -14,9 +14,9 @@ describe('MODULE_FILES', () => {
     assert.ok(MODULE_FILES.core);
     assert.ok(MODULE_FILES.core.includes('core.md'));
   });
-  it('has all 6 modules', () => {
+  it('has all 7 modules', () => {
     const keys = Object.keys(MODULE_FILES);
-    assert.deepEqual(keys.sort(), ['art', 'chart', 'core', 'diagram', 'interactive', 'mockup']);
+    assert.deepEqual(keys.sort(), ['3d', 'art', 'chart', 'core', 'diagram', 'interactive', 'mockup']);
   });
 });
 
@@ -34,6 +34,13 @@ describe('loadSystemPrompt', () => {
   it('includes diagram guidelines when requested', () => {
     const text = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, ['core', 'diagram']);
     assert.ok(text.includes('Flowchart') || text.includes('flowchart') || text.includes('diagram'));
+  });
+
+  it('includes 3d-scene guidelines when requested', () => {
+    const text = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, ['core', '3d']);
+    assert.ok(text.includes('Three.js'));
+    assert.ok(text.includes('OrbitControls'));
+    assert.ok(text.includes('MeshLambertMaterial'));
   });
 
   it('preserves the structural diagram container rounding exception', () => {
@@ -60,6 +67,21 @@ describe('loadSystemPrompt', () => {
     const text = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, []);
     assert.ok(text.includes('show-widget'));
   });
+
+  it('injects the Seed color patch only for Seed 2 series models', () => {
+    const text = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, ['core', 'mockup'], {
+      model: 'doubao-seed-2-0-pro-260215',
+    });
+    assert.ok(text.includes('Seed 2 color discipline patch'));
+    assert.ok(text.includes('near-monochrome'));
+  });
+
+  it('does not inject the Seed color patch for other models', () => {
+    const text = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, ['core', 'mockup'], {
+      model: 'gpt-5.4',
+    });
+    assert.ok(!text.includes('Seed 2 color discipline patch'));
+  });
 });
 
 // README 167-177: 每种推荐主题组合都应能正确构建 system prompt
@@ -72,6 +94,7 @@ describe('README theme combinations', () => {
     { name: '品牌/世界观/设定', modules: ['core', 'art', 'mockup'], mustInclude: ['art', 'ui-components'] },
     { name: '复杂策略/流程优化', modules: ['core', 'diagram', 'chart', 'interactive'], mustInclude: ['diagram', 'chart', 'ui-components'] },
     { name: '视觉灵感', modules: ['art', 'mockup'], mustInclude: ['art', 'ui-components'] },
+    { name: '3D空间场景', modules: ['core', '3d'], mustInclude: ['3d-scene', 'color-palette'] },
   ];
 
   for (const combo of THEME_COMBOS) {

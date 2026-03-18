@@ -33,6 +33,7 @@ Parameters:
 | Product features / selling points / advantages | HTML card grid with clickable items |
 | Introduce / explain a thing with multiple aspects | SVG structural diagram or HTML card grid |
 | Pros and cons / trade-offs | HTML comparison cards or SVG side-by-side |
+| 3D spatial model / orbital / molecular / mechanical | Three.js (canvas + CDN) |
 
 **Default behavior: generate a widget.** Most questions benefit from visual presentation. Only use plain text when the question is strictly conversational (greetings, opinions, short factual lookups, code snippets, or meta-discussion about the conversation itself). When in doubt, generate a widget.
 
@@ -114,6 +115,7 @@ Follow the design guidelines in `prompts/guidelines/` for detailed rules on:
 - `chart.md` — Chart.js setup, legends, number formatting, dashboard layout
 - `ui-components.md` — UI tokens, metric cards, layout, interactive explainers, comparisons
 - `art.md` — SVG illustration and generative art
+- `3d-scene.md` — Three.js 3D scenes (orbital, molecular, mechanical, process demos)
 
 Pick the guideline modules that match your use case:
 
@@ -124,5 +126,6 @@ Pick the guideline modules that match your use case:
 | Interactive explainer / calculator | core + ui-components + color-palette |
 | UI mockup / prototype | core + ui-components + color-palette |
 | Illustration / generative art | core + svg-setup + art |
+| 3D scene / spatial model | core + color-palette + 3d-scene |
 
 </widget-capability>

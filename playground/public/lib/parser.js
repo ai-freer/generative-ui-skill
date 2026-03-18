@@ -253,6 +253,79 @@ function extractPartialWidgetCode(partialBody) {
   return result || null;
 }
 
+/**
+ * Early detection of a 3D widget from partial streaming code.
+ * Returns true as soon as we see canvas + Three.js CDN reference,
+ * which appears very early in the stream before the shell is complete.
+ */
+function detect3DWidget(partialCode) {
+  return partialCode.includes('<canvas') && partialCode.includes('three.min.js');
+}
+
+/**
+ * Detect if a 3D widget's shell (canvas + CDN + init skeleton + animate loop)
+ * is complete enough to create an early iframe for progressive rendering.
+ * Returns { isComplete: boolean, shellEnd: number } where shellEnd is the
+ * character index after the animate() call.
+ */
+function detect3DShellComplete(partialCode) {
+  if (!partialCode.includes('three.min.js')) return { isComplete: false };
+  if (!partialCode.includes('OrbitControls.js')) return { isComplete: false };
+  var animateMatch = partialCode.match(/function\s+animate\s*\(\)/);
+  if (!animateMatch) return { isComplete: false };
+  if (!partialCode.includes('renderer.render(')) return { isComplete: false };
+  var animateCallIdx = partialCode.indexOf('animate();', animateMatch.index);
+  if (animateCallIdx === -1) return { isComplete: false };
+  // Shell must include the init() invocation line so the iframe actually runs
+  var initCallIdx = partialCode.indexOf('init();', animateCallIdx);
+  if (initCallIdx === -1) return { isComplete: false };
+  return { isComplete: true, shellEnd: initCallIdx + 'init();'.length };
+}
+
+/**
+ * Build a valid early 3D shell document from a partial widget_code string.
+ * The shell intentionally stops right after the first init() call so later
+ * streamed mesh code can be injected via postMessage. If the source script
+ * tag is still open at shellEnd, we close it here so buildWidgetDoc does not
+ * inject its own helper script into the middle of model-generated JS.
+ */
+function buildEarly3DShell(partialCode, shellEnd) {
+  var shell = partialCode.slice(0, shellEnd);
+  shell = shell.replace(/\s+onload=(['"])init\(\)\1/, '');
+  shell = shell.replace(/\s*if\s*\(\s*window\.THREE\s*&&\s*THREE\.OrbitControls\s*\)\s*init\(\);\s*$/, '');
+  if (!shell.includes('<script')) return shell;
+  var lastOpenIdx = shell.lastIndexOf('<script');
+  var lastCloseIdx = shell.lastIndexOf('</script>');
+  if (lastOpenIdx > lastCloseIdx) {
+    shell += '</script>';
+  }
+  return shell;
+}
+
+/**
+ * Extract only the JS tail that still belongs to the model's main 3D script.
+ * Once the source stream reaches </script>, we stop before the closing tag so
+ * the injected delta stays valid JavaScript for eval().
+ */
+function extract3DInjectChunk(partialCode, start) {
+  var closeIdx = partialCode.indexOf('</script>', start);
+  if (closeIdx === -1) {
+    return { code: partialCode.slice(start), end: partialCode.length, scriptClosed: false };
+  }
+  return { code: partialCode.slice(start, closeIdx), end: closeIdx, scriptClosed: true };
+}
+
+/**
+ * Extract complete JS statements from a code fragment.
+ * Only returns code up to the last ';' or '}' to avoid injecting
+ * partial statements that would cause SyntaxError.
+ */
+function extractCompleteStatements(code) {
+  var lastSafe = Math.max(code.lastIndexOf(';'), code.lastIndexOf('}'));
+  if (lastSafe === -1) return { safe: '', remainder: code };
+  return { safe: code.slice(0, lastSafe + 1), remainder: code.slice(lastSafe + 1) };
+}
+
 function textToHtml(text) {
   const escaped = escapeHtml(text);
   const parts = [];
@@ -291,5 +364,10 @@ export {
   parseShowWidgetFence,
   findAllShowWidgetFences,
   extractPartialWidgetCode,
+  detect3DWidget,
+  detect3DShellComplete,
+  buildEarly3DShell,
+  extract3DInjectChunk,
+  extractCompleteStatements,
   textToHtml,
 };

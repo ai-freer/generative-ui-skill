@@ -8,9 +8,25 @@ export const MODULE_FILES = {
   interactive: ['ui-components.md', 'color-palette.md'],
   mockup: ['ui-components.md', 'color-palette.md'],
   art: ['svg-setup.md', 'art.md'],
+  '3d': ['color-palette.md', '3d-scene.md'],
 };
 
-export function loadSystemPrompt(promptsDir, guidelinesDir, modules = ['core', 'diagram']) {
+function isSeed2SeriesModel(model = '') {
+  const normalized = String(model).toLowerCase();
+  return (
+    /(?:^|[-_ ])seed(?:[-_ ]?2|[-_ ]?2\.0)(?:[-_ ]|$)/i.test(normalized) ||
+    /(?:^|[-_ ])doubao[-_ ]seed[-_ ]2(?:[-_ ]0)?(?:[-_ ]|$)/i.test(normalized)
+  );
+}
+
+function resolvePromptPatchFiles({ model } = {}) {
+  if (isSeed2SeriesModel(model)) {
+    return ['seed-color-discipline.md'];
+  }
+  return [];
+}
+
+export function loadSystemPrompt(promptsDir, guidelinesDir, modules = ['core', 'diagram'], options = {}) {
   const systemPath = join(promptsDir, 'system.md');
   let text = readFileSync(systemPath, 'utf8');
   const seen = new Set();
@@ -30,5 +46,16 @@ export function loadSystemPrompt(promptsDir, guidelinesDir, modules = ['core', '
       }
     }
   }
+
+  const patchFiles = resolvePromptPatchFiles(options);
+  for (const file of patchFiles) {
+    const path = join(promptsDir, 'patches', file);
+    try {
+      text += '\n\n' + readFileSync(path, 'utf8');
+    } catch (_) {
+      // skip missing
+    }
+  }
+
   return text;
 }

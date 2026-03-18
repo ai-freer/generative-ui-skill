@@ -11,6 +11,11 @@ import {
   parseShowWidgetFence,
   findAllShowWidgetFences,
   extractPartialWidgetCode,
+  detect3DWidget,
+  detect3DShellComplete,
+  buildEarly3DShell,
+  extract3DInjectChunk,
+  extractCompleteStatements,
   textToHtml,
 } from '../public/lib/parser.js';
 
@@ -332,6 +337,161 @@ describe('textToHtml', () => {
   });
 });
 
+describe('detect3DWidget', () => {
+  it('detects 3D widget with canvas and Three.js CDN', () => {
+    const code = '<canvas id="c"></canvas><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>';
+    assert.equal(detect3DWidget(code), true);
+  });
+
+  it('returns false for SVG widget', () => {
+    assert.equal(detect3DWidget('<svg viewBox="0 0 100 100"><rect/></svg>'), false);
+  });
+
+  it('returns false for canvas without Three.js', () => {
+    assert.equal(detect3DWidget('<canvas id="c"></canvas><script>ctx.fillRect(0,0,10,10)</script>'), false);
+  });
+
+  it('returns false for Three.js without canvas', () => {
+    assert.equal(detect3DWidget('<div></div><script src="three.min.js"></script>'), false);
+  });
+
+  it('detects early in stream before shell is complete', () => {
+    // Just the style + canvas + first CDN tag — shell is far from complete
+    const earlyCode = '<style>canvas { display: block; }</style><canvas id="c"></canvas><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>';
+    assert.equal(detect3DWidget(earlyCode), true);
+  });
+});
+
+describe('detect3DShellComplete', () => {
+  const fullShell = [
+    '<canvas id="c"></canvas>',
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
+    '<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" onload="init()"></script>',
+    '<script>',
+    'var scene, camera, renderer, controls;',
+    'function init() {',
+    '  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c") });',
+    '  scene = new THREE.Scene();',
+    '  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);',
+    '  controls = new THREE.OrbitControls(camera, document.getElementById("c"));',
+    '  function animate() {',
+    '    requestAnimationFrame(animate);',
+    '    controls.update();',
+    '    renderer.render(scene, camera);',
+    '  }',
+    '  animate();',
+    '}',
+    'if (window.THREE && THREE.OrbitControls) init();',
+    '</script>',
+  ].join('\n');
+
+  it('detects complete 3D shell', () => {
+    const result = detect3DShellComplete(fullShell);
+    assert.equal(result.isComplete, true);
+    assert.ok(result.shellEnd > 0);
+  });
+
+  it('shellEnd points after init() call', () => {
+    const result = detect3DShellComplete(fullShell);
+    const before = fullShell.slice(0, result.shellEnd);
+    assert.ok(before.endsWith('init();'));
+  });
+
+  it('builds an early shell with a closed script tag', () => {
+    const result = detect3DShellComplete(fullShell);
+    const shell = buildEarly3DShell(fullShell, result.shellEnd);
+    assert.ok(shell.endsWith('</script>'));
+    assert.ok(!shell.includes('onload="init()"'));
+    assert.ok(!shell.includes('if (window.THREE && THREE.OrbitControls) init();'));
+  });
+
+  it('returns false when Three.js CDN missing', () => {
+    const code = fullShell.replace('three.min.js', 'other.js');
+    assert.equal(detect3DShellComplete(code).isComplete, false);
+  });
+
+  it('returns false when OrbitControls missing', () => {
+    const code = fullShell.replace('OrbitControls.js', 'other.js');
+    assert.equal(detect3DShellComplete(code).isComplete, false);
+  });
+
+  it('returns false when animate function not yet streamed', () => {
+    const partial = fullShell.split('function animate')[0];
+    assert.equal(detect3DShellComplete(partial).isComplete, false);
+  });
+
+  it('returns false when renderer.render not yet streamed', () => {
+    const partial = fullShell.split('renderer.render')[0];
+    assert.equal(detect3DShellComplete(partial).isComplete, false);
+  });
+
+  it('returns false when animate() call not yet streamed', () => {
+    // Has function animate() definition but not the animate(); invocation after it
+    const partial = fullShell.split('  animate();')[0];
+    assert.equal(detect3DShellComplete(partial).isComplete, false);
+  });
+
+  it('returns false when init() call not yet streamed', () => {
+    // Has animate(); but not the trailing init(); invocation
+    const partial = fullShell.split('if (window.THREE')[0];
+    assert.equal(detect3DShellComplete(partial).isComplete, false);
+  });
+
+  it('returns false for non-3D widget code', () => {
+    const svgCode = '<svg viewBox="0 0 100 100"><rect width="50" height="50"/></svg>';
+    assert.equal(detect3DShellComplete(svgCode).isComplete, false);
+  });
+});
+
+describe('extractCompleteStatements', () => {
+  it('extracts up to last semicolon', () => {
+    const result = extractCompleteStatements('var a = 1; var b = 2; var c =');
+    assert.equal(result.safe, 'var a = 1; var b = 2;');
+    assert.equal(result.remainder, ' var c =');
+  });
+
+  it('extracts up to last closing brace', () => {
+    const result = extractCompleteStatements('if (true) { doStuff(); } partial');
+    assert.equal(result.safe, 'if (true) { doStuff(); }');
+    assert.equal(result.remainder, ' partial');
+  });
+
+  it('returns empty safe when no complete statement', () => {
+    const result = extractCompleteStatements('var x =');
+    assert.equal(result.safe, '');
+    assert.equal(result.remainder, 'var x =');
+  });
+
+  it('handles empty input', () => {
+    const result = extractCompleteStatements('');
+    assert.equal(result.safe, '');
+    assert.equal(result.remainder, '');
+  });
+
+  it('returns full code when it ends with semicolon', () => {
+    const result = extractCompleteStatements('scene.add(mesh);');
+    assert.equal(result.safe, 'scene.add(mesh);');
+    assert.equal(result.remainder, '');
+  });
+});
+
+describe('extract3DInjectChunk', () => {
+  it('returns trailing JS while the main script is still open', () => {
+    const partial = '<script>init();scene.add(mesh);';
+    const result = extract3DInjectChunk(partial, partial.indexOf('scene.add'));
+    assert.equal(result.code, 'scene.add(mesh);');
+    assert.equal(result.scriptClosed, false);
+  });
+
+  it('stops before the closing script tag', () => {
+    const partial = '<script>init();scene.add(mesh);</script><div>tail</div>';
+    const result = extract3DInjectChunk(partial, partial.indexOf('scene.add'));
+    assert.equal(result.code, 'scene.add(mesh);');
+    assert.equal(result.end, partial.indexOf('</script>'));
+    assert.equal(result.scriptClosed, true);
+  });
+});
+
 describe('playground app regression', () => {
   it('imports the shared parser module from app.js', () => {
     assert.ok(appJsSource.includes("from './lib/parser.js'"));
@@ -349,6 +509,24 @@ describe('playground app regression', () => {
     // Should NOT have inline buildWidgetDoc function
     assert.ok(!appJsSource.includes('function buildWidgetDoc('));
     assert.ok(!appJsSource.includes("const CDN_ORIGINS"));
+  });
+
+  it('keeps only the 3D detection helper in app.js', () => {
+    assert.ok(appJsSource.includes('detect3DWidget'));
+    assert.ok(appJsSource.includes('正在生成 3D 场景'));
+    assert.ok(!appJsSource.includes('earlyIframe'));
+  });
+
+  it('uses a stable placeholder instead of streaming 3D execution', () => {
+    assert.ok(appJsSource.includes('Conservative fallback: 3D widgets stay on a stable placeholder'));
+    assert.ok(appJsSource.includes("state.placeholderEl.innerHTML = '<p class=\"typing\">正在生成 3D 场景…</p>'"));
+  });
+
+  it('suspends widget iframes while streaming sessions are in background', () => {
+    assert.ok(appJsSource.includes('function suspendWidgetIframes(root)'));
+    assert.ok(appJsSource.includes('function resumeWidgetIframes(root)'));
+    assert.ok(appJsSource.includes('suspendWidgetIframes(messagesEl);'));
+    assert.ok(appJsSource.includes('resumeWidgetIframes(fragment);'));
   });
 
   it('loads app.js as an ES module', () => {

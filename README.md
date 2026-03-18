@@ -1,226 +1,272 @@
 # Generative UI Skill
 
+[English](./README.md) | [中文](./README_CN.md)
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-让任何 chatbot 的文本输出能够承载交互式 UI 组件 —— 图表、架构图、计算器、数据可视化 —— 无需前端改造，任何能输出 markdown 的模型都能驱动。
+Make any chatbot response carry interactive UI components such as charts, architecture diagrams, calculators, and data visualizations. No frontend refactor is required. Any model that can output Markdown can drive it.
 
-## 致谢
+## Acknowledgements
 
-本项目的灵感和核心技术参考来自以下作者和开源项目，在此特别致谢：
+The inspiration and core technical references for this project come from the following authors and open-source projects:
 
-- **[@op7418（歸藏）](https://github.com/op7418)**—— 其文章[《我复刻了 Claude 刚发布的生成式 UI 交互！》](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g)验证了代码围栏 + sandbox iframe 方案的可行性，并证明 Kimi K2.5、Minimax M2.5 等国产模型同样能驱动该能力，为本项目提供了核心灵感。
-- **[pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)**（[Michaelliv](https://github.com/Michaelliv)，MIT 协议）—— 逆向工程了 Claude.ai 原生 `show_widget` 实现，提取了完整的 Anthropic 设计指南（~72KB），并用 morphdom + Glimpse 在终端 agent 中复现了流式渲染体验。本项目的 `prompts/guidelines/` 设计指南即基于该项目提取适配。逆向工程文章：[Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
-
----
-
-## 项目背景
-
-2026-03-12，Anthropic 在 Claude.ai 上线了生成式 UI 交互 —— 模型可以在对话中内联渲染交互式 HTML/SVG 组件。CodePilot 用开源方案复刻了这套能力。
-
-本项目的目标：把这套能力抽象成**通用 Skill**，让 OpenClaw 管理的所有 chatbot 和 AI agent 都能生成富 UI 回复。
+- **[@op7418](https://github.com/op7418)** - The article [I Recreated Claude's Newly Released Generative UI Interaction](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g) helped us recognize early that the code-fence-plus-iframe-isolation approach was technically viable, and it gave this project important direction.
+- **[pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)** by [Michaelliv](https://github.com/Michaelliv) under the MIT License - It reverse-engineered Claude.ai's native `show_widget` implementation, extracted the full Anthropic design guidelines (~72 KB), and reproduced the streaming rendering experience in a terminal agent with morphdom and Glimpse. The design guides in `prompts/guidelines/` in this project are adapted from that extracted material. Reverse-engineering article: [Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
 
 ---
 
-## 核心架构
+## Background
 
-整个方案分为三层：**Prompt Skill → 渲染运行时 → 渠道适配层**，逐层解耦。
+On March 12, 2026, Anthropic launched generative UI interaction on Claude.ai, allowing models to render interactive HTML/SVG components inline in conversations. Soon after, `pi-generative-ui` produced a relatively complete open-source reproduction of the mechanism, and the `CodePilot` article and implementation also provided valuable engineering inspiration.
+
+The goal of this project is to abstract that capability into a **general-purpose skill**, so every chatbot and AI agent managed by OpenClaw can generate rich UI responses.
+
+---
+
+## Current Release Status
+
+This repository is currently published with the following practical status:
+
+- `main` is the deployable Web Playground line, representing the currently usable outcome of **M1 + M2**.
+- `m3/channel-adapters` is the dedicated channel-adapter branch. It already contains **M3a prototype scripts**, but it has **not** completed real channel integration and end-to-end validation for Telegram, Feishu, or other outbound channels.
+
+In other words, the project is already usable today as an open-source local Web Playground, while the multi-channel delivery layer is still under active follow-up development.
+
+---
+
+## Core Architecture
+
+The solution is split into three layers: **Prompt Skill -> Rendering Runtime -> Channel Adapter Layer**, with clear separation between them.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    任意 LLM 模型                         │
-│          （Claude / GPT / Kimi / Seed / ...）            │
+│                     Any LLM Model                        │
+│          (Claude / GPT / Kimi / Seed / ...)             │
 └────────────────────────┬────────────────────────────────┘
-                         │  注入 System Prompt + Guidelines
+                         │  Inject System Prompt + Guidelines
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│              ① Prompt Skill（M1）                        │
+│              ① Prompt Skill (M1)                        │
 │                                                         │
-│  模型学会用 ```show-widget 代码围栏输出 HTML/SVG widget  │
-│  模块化设计指南按需加载（diagram / chart / art / ...）    │
+│  The model learns to output HTML/SVG widgets inside     │
+│  ```show-widget fences                                  │
+│  Modular design guides are loaded on demand             │
+│  (diagram / chart / art / ...)                          │
 └────────────────────────┬────────────────────────────────┘
-                         │  模型输出包含 show-widget 围栏的文本流
+                         │  The model streams text that contains
+                         │  show-widget fences
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│              ② 渲染运行时（M2）                          │
-│              @generative-ui/renderer                     │
+│              ② Rendering Runtime (M2)                   │
+│              @generative-ui/renderer                    │
 │                                                         │
-│  流式围栏检测 → HTML 清理 → CSS 变量桥接 → 渲染          │
-│  三阶段流水线：流式 DOM 预览 → sandbox iframe → 交互桥接  │
+│  Streaming fence detection -> HTML sanitization ->      │
+│  CSS variable bridging -> rendering                     │
+│  Three-stage pipeline: streaming DOM preview ->         │
+│  sandbox iframe -> interaction bridge                   │
 └────────────────────────┬────────────────────────────────┘
-                         │  标准化的 widget 渲染能力
+                         │  Standardized widget rendering
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│              ③ 渠道适配层（M3）                           │
+│              ③ Channel Adapter Layer (M3)               │
 │                                                         │
-│  按渠道能力选择渲染策略：                                 │
-│  Web / App → 满血渲染（完整流水线）                       │
-│  飞书 / Telegram / 微信 → 图片 + 按钮 / 富文本卡片 / H5  │
+│  Rendering strategy is chosen based on channel          │
+│  capabilities:                                          │
+│  Web / App -> full rendering pipeline                   │
+│  Feishu / Telegram / WeChat -> image + button /         │
+│  rich text card / H5                                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
-核心设计选择：
+Key design choices:
 
-- **代码围栏而非 tool_use** —— 不依赖特定 SDK，任何能输出 markdown 的模型都能驱动
-- **三阶段渲染流水线** —— 流式预览（边生成边看）→ sandbox iframe（安全执行）→ 交互桥接（drill-down 追问）
-- **模块化设计指南** —— 基于 Anthropic 原版提取适配，按场景按需加载，避免 token 浪费
+- **Code fences instead of `tool_use`** - No dependency on a specific SDK. Any model that can emit Markdown can drive the system.
+- **Three-stage rendering pipeline** - Streaming preview for live generation, sandbox iframe for safe execution, and an interaction bridge for drill-down follow-up.
+- **Modular design guides** - Adapted from Anthropic's original guidance and loaded only when needed to avoid wasting tokens.
 
 ---
 
-## 核心产出
+## Key Deliverables
 
 ### Prompt Skill
 
-System prompt 注入层，是整个方案的基础。启用后，模型知道如何用 ` ```show-widget ` 代码围栏输出合法的 HTML/SVG widget。
+The system-prompt injection layer is the foundation of the whole approach. Once enabled, the model knows how to output valid HTML/SVG widgets inside ` ```show-widget ` code fences.
 
-内置 6 个设计指南模块，可自由组合：
+Six design-guide modules are built in and can be freely combined:
 
-| 模块 | 适用场景 |
+| Module | Typical Scenarios |
 |------|---------|
-| **core** | 结构化文字说明（概念、规则、方法、分点总结） |
-| **diagram** | 关系 / 结构 / 流程图（架构图、时序图、用户旅程图等） |
-| **chart** | 数据图表（趋势、对比、分布、占比等） |
-| **interactive** | 可交互内容（可点 / 可拖 / 可调参数的 demo、模拟器、小工具） |
-| **mockup** | 界面、原型和高保真页面效果 |
-| **art** | 风格化视觉（插画、海报、情绪板、世界观视觉） |
+| **core** | Structured text explanation: concepts, rules, methods, and bullet summaries |
+| **diagram** | Relationships, structures, and flow diagrams such as architecture diagrams, sequence diagrams, and user journeys |
+| **chart** | Data charts for trends, comparisons, distributions, and composition |
+| **interactive** | Interactive content such as clickable, draggable, or parameter-adjustable demos, simulators, and tools |
+| **mockup** | Interfaces, prototypes, and high-fidelity page compositions |
+| **art** | Stylized visuals such as illustrations, posters, mood boards, and world-building scenes |
 
-所有主题至少会有 `core`，再叠加其它视角。每个主题可以同时使用 2–4 个模块，让信息更立体。
+Every topic includes at least `core`, then layers on additional perspectives. A single topic can combine 2 to 4 modules to make the output more multidimensional.
 
-### 渲染运行时
+### Rendering Runtime
 
-框架无关的 JS 库 `@generative-ui/renderer`（M2 开发中）。任何前端引入后就能渲染 show-widget 围栏内的 HTML/SVG。核心能力：
+`@generative-ui/renderer` is a framework-agnostic JavaScript library currently in M2 development. Once included in a frontend app, it can render the HTML/SVG contained in show-widget fences. Core capabilities include:
 
-- 流式围栏检测 + partial JSON 提取
-- 两阶段 HTML 清理（流式阶段剥离危险标签，终态阶段保留脚本在 sandbox 内执行）
-- CSS 变量桥接（模型写标准变量名，桥接层映射到宿主实际变量）
-- 双模式渲染器（iframe 隔离模式 / morphdom 性能模式）
-- 封装为 Web Component `<widget-renderer>`
+- Streaming fence detection plus partial JSON extraction
+- Two-stage HTML sanitization: strip dangerous tags during streaming, then preserve scripts for execution inside the sandbox at the final stage
+- CSS variable bridging: the model writes standard variable names and the bridge maps them to host-specific variables
+- Dual renderer modes: iframe isolation mode and morphdom performance mode
+- Packaging as a Web Component: `<widget-renderer>`
 
 ### Playground
 
-项目自带一个完整的本地测试环境（`playground/`），可以直接体验 Generative UI 的效果：
+The project includes a complete local testing environment in `playground/` so you can experience Generative UI directly:
 
 ```bash
 cd playground
-cp .env.example .env   # 配置 API Key
+cp .env.example .env   # Configure your API key
 npm install
-npm start              # 启动后访问 http://localhost:3456
+npm start              # Then visit http://localhost:3456
 ```
 
-Playground 包含：
-- Express 后端（SSE 流式代理，支持 OpenAI / Anthropic / 兼容 API）
-- Chat UI 前端（流式围栏检测 → 增量 DOM 预览 → sandbox iframe 渲染）
-- 4 个示例 widget（`examples/` 目录：流程图、图表、计算器、对比图）
+The playground includes:
 
-Playground 同时也是 M2 渲染运行时的原型验证环境 —— `playground/public/app.js` 中已验证了完整的三阶段渲染流水线，M2 在此基础上提取为可复用库。
+- An Express backend with SSE streaming proxy support for OpenAI, Anthropic, and compatible APIs
+- A chat UI frontend with streaming fence detection, incremental DOM preview, and sandbox iframe rendering
+- Four example widgets in `examples/`: a flowchart, a chart, a calculator, and a comparison view
+
+The playground also serves as the prototype validation environment for the M2 rendering runtime. `playground/public/app.js` already verifies the full three-stage rendering pipeline, and M2 is being extracted from that implementation into a reusable library.
+
+### How to Use Playground
+
+This project is open-sourced for self-hosted and local use. There is currently no shared hosted demo with centrally managed API keys.
+
+To use the playground yourself:
+
+1. Clone this repository locally.
+2. Create your own `playground/.env` from `playground/.env.example`.
+3. Fill in your own provider API keys such as OpenAI-, Anthropic-, or compatible-provider credentials.
+4. Install dependencies and start the local server.
+5. Open `http://localhost:3456` in your browser and select the provider/model you want to test.
+
+Example:
+
+```bash
+git clone https://github.com/ai-freer/generative-ui-skill.git
+cd generative-ui-skill/playground
+cp .env.example .env
+npm install
+npm start
+```
+
+If you want to share it inside your own team, the recommended path is to deploy the playground in your own environment and let each team or deployment manage its own API keys.
 
 ---
 
-## 渠道适配与使用方式
+## Channel Adaptation and Usage
 
-不同渠道的消息容器能力差异很大。项目设计了四种渲染策略，按渠道能力自动选择：
+Different message containers have very different rendering capabilities. The project defines four rendering strategies and chooses among them based on what the target channel supports:
 
-| 策略 | 适用渠道 | 方式 |
+| Strategy | Applicable Channels | Method |
 |------|---------|------|
-| 满血渲染 | Web（iframe）、App（WKWebView） | `@generative-ui/renderer` 完整流水线，流式预览 + JS 交互 |
-| 静态图片 + 按钮 | 飞书、Telegram、微信 | headless 渲染 widget 为 PNG，drill-down 映射为原生按钮 |
-| 富文本卡片 | 飞书 | widget 结构映射为飞书 Message Card JSON |
-| H5 跳转 | 飞书、Telegram、微信 | widget 存储到临时 URL，在内置浏览器中打开 |
+| Full rendering | Web (iframe), App (WKWebView) | Complete `@generative-ui/renderer` pipeline with streaming preview and JavaScript interaction |
+| Static image + buttons | Feishu, Telegram, WeChat | Render the widget headlessly to PNG and map drill-down actions to native buttons |
+| Rich text card | Feishu | Map widget structure into Feishu Message Card JSON |
+| H5 redirect | Feishu, Telegram, WeChat | Store the widget at a temporary URL and open it in the built-in browser |
 
-### Web 集成
+### Web Integration
 
-如果你有自己的 Web 应用，可以直接引入渲染运行时：
+If you already have a web application, you can integrate the rendering runtime directly:
 
 ```html
 <script src="@generative-ui/renderer"></script>
 <widget-renderer stream="..."></widget-renderer>
 ```
 
-或者参考 `playground/` 的实现，将流式渲染逻辑嵌入你自己的聊天界面。
+Or you can use `playground/` as a reference and embed the streaming-rendering logic into your own chat UI.
 
-### 开发自定义渠道适配器
+### Build a Custom Channel Adapter
 
-如果你需要接入飞书、Telegram、微信或其他渠道，可以参考 `architecture/m3-channel-adapters.md` 中的架构设计，实现自己的 Channel Adapter。每个 adapter 只需要：
+If you need to integrate Feishu, Telegram, WeChat, or other channels, refer to the architecture design in `architecture/m3-channel-adapters.md` and implement your own channel adapter. Each adapter only needs to:
 
-1. 接收 Widget Interceptor 解析出的 `{ title, widget_code }`
-2. 根据渠道能力选择渲染策略
-3. 调用对应的渲染服务（renderer / screenshot / card builder / hosting）
-4. 将结果通过渠道 API 投递
+1. Receive `{ title, widget_code }` parsed by the Widget Interceptor
+2. Select a rendering strategy based on channel capabilities
+3. Call the corresponding rendering service such as the renderer, screenshot service, card builder, or hosting layer
+4. Deliver the final result through the channel API
 
-新增渠道只需新增 adapter，不影响上游的 Skill 和 Renderer。
+Adding a new channel only requires adding a new adapter. It does not affect the upstream skill or renderer.
 
 ---
 
-## 模型兼容性
+## Model Compatibility
 
-| 模型 | 支持情况 | 备注 |
+| Model | Status | Notes |
 |------|---------|------|
-| Claude Sonnet 4.6 | ✅ | 高性价比 Sota 模型 |
-| Openai GPT 5.4 | ✅ | 高性价比 Sota 模型 |
-| Kimi K2.5 | ✅ | 图形质量甚至优于 Sonnet 4.6 |
-| Seed 2.0 Pro | 待验证 | 需测试 prompt 遵循度和生成质量 |
-| 其他 markdown 模型 | 理论可行 | 需验证 prompt 遵循度 |
+| Claude Sonnet 4.6 | ✅ | Strong price-performance frontier model |
+| Openai GPT 5.4 | ✅ | Strong price-performance frontier model |
+| Kimi K2.5 | ✅ | Visual quality can even exceed Sonnet 4.6 |
+| Seed 2.0 Pro | To be verified | Prompt compliance and generation quality still need testing |
+| Other Markdown-capable models | Theoretically feasible | Prompt compliance still needs validation |
 
-### 多模型适应策略
+### Multi-model Adaptation Strategy
 
-不同模型的指令遵循能力差异显著，尤其体现在交互设计（drill-down、follow-up）上：
+Instruction-following ability varies significantly across models, especially in interaction design such as drill-down and follow-up:
 
-- **强模型**（Claude Opus/Sonnet、GPT-4/5）—— 能自主判断哪些内容值得展开，主动在关键节点添加 drill-down 交互，生成追问引导。Prompt 只需给出原则性规则，模型自行决策。
-- **中等模型**（Kimi K2.5、Seed 2.0 Pro 等）—— 能完成基本的 widget 渲染，但对"什么内容值得交互"的判断较弱，容易输出纯静态图表。
+- **Stronger models** such as Claude Opus/Sonnet and GPT-4/5 can independently decide which content is worth expanding, proactively add drill-down interactions to key nodes, and generate follow-up guidance. The prompt only needs to define the principles and the model can decide on its own.
+- **Mid-tier models** such as Kimi K2.5 and Seed 2.0 Pro can complete basic widget rendering, but they are weaker at judging what deserves interaction and tend to output static charts.
 
-为此，System Prompt 采用**分层引导**设计：
-1. 原则层 —— 定义"meaningful node"的判断标准（术语、数据点、流程步骤、对比项），强模型据此自主决策
-2. 兜底倾向 —— "When in doubt, prefer clickable over static"，为中等模型提供明确的行动偏好
-3. 保底输出 —— 要求每个 widget 底部至少包含 2–3 个 follow-up 问题按钮，确保即使模型无法在节点级别做交互，用户仍有延展路径
+To address that, the system prompt uses a **layered guidance** strategy:
 
----
-
-## CDN 白名单
-
-Widget 内的 `<script src>` 只能从以下 CDN 加载（CSP 强制执行）：
-
-- **cdnjs.cloudflare.com** — Chart.js, D3 等主流库
-- **cdn.jsdelivr.net** — npm 包 CDN
-- **unpkg.com** — npm 包 CDN
-- **esm.sh** — ESM 格式 CDN
+1. Principle layer - defines the criteria for a "meaningful node" such as terminology, data points, process steps, and comparison items, so stronger models can decide autonomously
+2. Fallback bias - "When in doubt, prefer clickable over static", giving mid-tier models a clear behavioral bias
+3. Minimum guarantee - requires every widget to include at least 2 to 3 follow-up question buttons at the bottom, so users still have a path to continue even if the model cannot create node-level interaction
 
 ---
 
-## 测试
+## CDN Allowlist
+
+Inside widgets, `<script src>` may only load from the following CDNs, enforced by CSP:
+
+- **cdnjs.cloudflare.com** - mainstream libraries such as Chart.js and D3
+- **cdn.jsdelivr.net** - npm package CDN
+- **unpkg.com** - npm package CDN
+- **esm.sh** - ESM-focused CDN
+
+---
+
+## Testing
 
 ```bash
 cd playground
 
-npm test           # 全部测试
-npm run test:unit  # 仅单元测试（parser / search / prompt / planner）
-npm run test:e2e   # 仅 E2E + widget 渲染检查
+npm test           # Run all tests
+npm run test:unit  # Unit tests only (parser / search / prompt / planner)
+npm run test:e2e   # E2E tests plus widget rendering checks
 ```
 
 ---
 
-## 里程碑
+## Milestones
 
-| 阶段 | 内容 | 状态 |
+| Phase | Scope | Status |
 |------|------|------|
-| M0 | 技术分析 + 源码研究 + 项目规划 | ✅ 完成 |
-| M1 | Prompt Skill 创建 + 验证 | ✅ 完成（待模型验证） |
-| M2 | 渲染运行时 JS 库 `@generative-ui/renderer` | 开发中 |
-| M3 | 渠道适配层 | 待开始 |
+| M0 | Technical analysis, source research, and project planning | ✅ Done |
+| M1 | Prompt Skill creation and validation | ✅ Done (pending model validation) |
+| M2 | Rendering runtime library `@generative-ui/renderer` | In progress |
+| M3 | Channel adapter layer | Not started |
 
-详细开发计划参见 [DEVELOPMENT.md](./DEVELOPMENT.md)，渠道适配架构参见 [architecture/m3-channel-adapters.md](./architecture/m3-channel-adapters.md)。
-
----
-
-## 参考资料
-
-- 歸藏原文：[《我复刻了 Claude 刚发布的生成式 UI 交互！》](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g)
-- 逆向工程文章：[Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
-- pi-generative-ui 仓库：https://github.com/Michaelliv/pi-generative-ui （MIT 协议）
-- CodePilot 仓库：https://github.com/op7418/CodePilot （未声明开源协议）
+For the detailed development roadmap, see [DEVELOPMENT.md](./DEVELOPMENT.md). For the channel adaptation architecture, see [architecture/m3-channel-adapters.md](./architecture/m3-channel-adapters.md).
 
 ---
 
-## 协议
+## References
 
-本项目基于 [Apache License 2.0](./LICENSE) 开源。
+- Original article by 歸藏: [I Recreated Claude's Newly Released Generative UI Interaction](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g)
+- Reverse-engineering article: [Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
+- pi-generative-ui repository: https://github.com/Michaelliv/pi-generative-ui (MIT License)
+- CodePilot repository: https://github.com/op7418/CodePilot (license not declared)
 
-使用本项目时，请保留 [NOTICE](./NOTICE) 文件中的版权声明和第三方归属信息。
+---
+
+## License
+
+This project is open-sourced under the [Apache License 2.0](./LICENSE).
+
+When using this project, please retain the copyright notice and third-party attribution information in [NOTICE](./NOTICE).

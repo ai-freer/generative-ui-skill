@@ -4,6 +4,7 @@ import {
   findAllShowWidgetFences,
   isShowWidgetFence,
   parseShowWidgetFence,
+  detect3DWidget,
   textToHtml,
 } from './lib/parser.js';
 
@@ -50,6 +51,7 @@ import {
   const messagesEl = document.getElementById('messages');
   const sessionListEl = document.getElementById('sessionList');
   const btnNewChat = document.getElementById('btnNewChat');
+  const btnCleanRun = document.getElementById('btnCleanRun');
   const providerSelect = document.getElementById('providerSelect');
   const modelSelect = document.getElementById('modelSelect');
   const modelStatusEl = document.getElementById('modelStatus');
@@ -91,13 +93,18 @@ import {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
   }
 
-  function createSession() {
-    const provider = providers[0];
-    const model = provider?.models?.[0];
+  function getDefaultModelForProvider(providerId) {
+    const provider = providers.find((p) => p.id === providerId) || providers[0];
+    return provider?.models?.[0] ?? '';
+  }
+
+  function createSession(options = {}) {
+    const providerId = options.provider ?? providers[0]?.id ?? '';
+    const model = options.model ?? getDefaultModelForProvider(providerId);
     const session = {
       id: crypto.randomUUID(),
       title: '新对话',
-      provider: provider?.id ?? '',
+      provider: providerId,
       model: model ?? '',
       messages: [],
       createdAt: Date.now(),
@@ -112,11 +119,51 @@ import {
     return sessions.find((s) => s.id === currentSessionId);
   }
 
+  function suspendWidgetIframes(root) {
+    if (!root?.querySelectorAll) return;
+    root.querySelectorAll('.widget-wrap iframe').forEach((iframe) => {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'widget-iframe-suspended';
+      placeholder._guIframeState = {
+        title: iframe.title || 'widget',
+        sandbox: iframe.getAttribute('sandbox') || 'allow-scripts',
+        srcdoc: iframe.srcdoc || '',
+        height: iframe.style.height || '',
+        minHeight: iframe.style.minHeight || '300px',
+      };
+      placeholder.style.width = '100%';
+      if (iframe.style.height) placeholder.style.height = iframe.style.height;
+      if (iframe.style.minHeight) placeholder.style.minHeight = iframe.style.minHeight;
+      iframe.replaceWith(placeholder);
+    });
+  }
+
+  function resumeWidgetIframes(root) {
+    if (!root?.querySelectorAll) return;
+    root.querySelectorAll('.widget-iframe-suspended').forEach((placeholder) => {
+      const state = placeholder._guIframeState;
+      if (!state?.srcdoc) {
+        placeholder.remove();
+        return;
+      }
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('sandbox', state.sandbox || 'allow-scripts');
+      iframe.title = state.title || 'widget';
+      iframe.srcdoc = state.srcdoc;
+      iframe.style.width = '100%';
+      iframe.style.border = 'none';
+      iframe.style.minHeight = state.minHeight || '300px';
+      if (state.height) iframe.style.height = state.height;
+      placeholder.replaceWith(iframe);
+    });
+  }
+
   function switchSession(id) {
     if (id === currentSessionId) return;
 
     // Detach current session's live DOM if it's streaming
     if (currentSessionId && activeStreams.has(currentSessionId)) {
+      suspendWidgetIframes(messagesEl);
       const fragment = document.createDocumentFragment();
       while (messagesEl.firstChild) {
         fragment.appendChild(messagesEl.firstChild);
@@ -132,6 +179,7 @@ import {
       messagesEl.innerHTML = '';
       const { fragment } = activeStreams.get(id);
       if (fragment) {
+        resumeWidgetIframes(fragment);
         messagesEl.appendChild(fragment);
         activeStreams.get(id).fragment = null;
       }
@@ -565,6 +613,22 @@ import {
     });
   }
 
+  async function startCleanRun() {
+    const message = input.value.trim();
+    const currentSession = getCurrentSession();
+    const provider = currentSession?.provider || providerSelect.value || providers[0]?.id || '';
+    const model = currentSession?.model || modelSelect.value || getDefaultModelForProvider(provider);
+    const newSession = createSession({ provider, model });
+    switchSession(newSession.id);
+
+    if (!message) {
+      input.focus();
+      return;
+    }
+
+    await submitUserMessage(message);
+  }
+
   async function retryUserMessage(messageIndex, content, button) {
     if (activeStreams.has(currentSessionId)) {
       setActionFeedback(button, '生成中');
@@ -786,7 +850,13 @@ import {
     const textEl = document.createElement('div');
     textEl.className = 'stream-text';
     container.appendChild(textEl);
-    return { widgetCount: 0, activeTextEl: textEl, placeholderEl: null, previewEl: null, container: container };
+    return {
+      widgetCount: 0,
+      activeTextEl: textEl,
+      placeholderEl: null,
+      previewEl: null,
+      container: container,
+    };
   }
 
   function renderStreamChunk(state, streamText) {
@@ -804,6 +874,7 @@ import {
         state.activeTextEl.innerHTML = textBefore ? textToHtml(textBefore) : '';
       }
 
+      // Clean up streaming preview elements
       if (state.previewEl) {
         state.previewEl.remove();
         state.previewEl = null;
@@ -848,16 +919,34 @@ import {
       const partialCode = extractPartialWidgetCode(partialBody);
 
       if (partialCode && partialCode.length > 30) {
-        if (state.placeholderEl) {
-          state.placeholderEl.remove();
-          state.placeholderEl = null;
+        const is3D = detect3DWidget(partialCode);
+
+        if (is3D) {
+          // Conservative fallback: 3D widgets stay on a stable placeholder
+          // until the full fence closes, then we render the final iframe once.
+          if (state.previewEl) {
+            state.previewEl.remove();
+            state.previewEl = null;
+          }
+          if (!state.placeholderEl) {
+            state.placeholderEl = document.createElement('div');
+            state.placeholderEl.className = 'widget-wrap widget-placeholder';
+            state.placeholderEl.innerHTML = '<p class="typing">正在生成 3D 场景…</p>';
+            state.container.appendChild(state.placeholderEl);
+          }
+        } else {
+          // Non-3D — standard streaming preview
+          if (state.placeholderEl) {
+            state.placeholderEl.remove();
+            state.placeholderEl = null;
+          }
+          if (!state.previewEl) {
+            state.previewEl = document.createElement('div');
+            state.previewEl.className = 'widget-wrap widget-streaming';
+            state.container.appendChild(state.previewEl);
+          }
+          state.previewEl.innerHTML = stripUnclosedScript(sanitizeForStreaming(partialCode));
         }
-        if (!state.previewEl) {
-          state.previewEl = document.createElement('div');
-          state.previewEl.className = 'widget-wrap widget-streaming';
-          state.container.appendChild(state.previewEl);
-        }
-        state.previewEl.innerHTML = stripUnclosedScript(sanitizeForStreaming(partialCode));
       } else {
         if (!state.placeholderEl && !state.previewEl) {
           state.placeholderEl = document.createElement('div');
@@ -983,6 +1072,10 @@ import {
     switchSession(newSession.id);
   });
 
+  btnCleanRun.addEventListener('click', async () => {
+    await startCleanRun();
+  });
+
   // --- Settings Modal ---
   const settingsOverlay = document.getElementById('settingsOverlay');
   const btnSettings = document.getElementById('btnSettings');
@@ -1001,6 +1094,11 @@ import {
   let settingsCustom = [];
   let settingsEnvCustom = [];
   let settingsKeys = {};
+  let settingsPresetModels = {};
+
+  function parseModelList(value) {
+    return value.split(',').map(s => s.trim()).filter(Boolean);
+  }
 
   function openSettings() {
     settingsOverlay.hidden = false;
@@ -1022,6 +1120,7 @@ import {
       const customRes = await fetch('/api/custom-providers');
       const customData = await customRes.json();
       settingsKeys = customData.keys || {};
+      settingsPresetModels = customData.presetModels || {};
       renderPresetTab();
       renderCustomList();
     } catch (err) {
@@ -1072,24 +1171,40 @@ import {
       testBtn.type = 'button';
       testBtn.className = 'btn-test';
       testBtn.textContent = 'Test';
-      testBtn.addEventListener('click', () => {
-        const key = keyInput.value.trim() || (p.hasEnvKey ? '__ENV__' : '');
-        if (!key) { resultEl.textContent = '请先输入 API Key'; resultEl.className = 'test-result error'; return; }
-        runTest(testBtn, resultEl, {
-          type: p.type,
-          baseUrl: p.baseUrl || '',
-          apiKey: key,
-          model: (p.models && p.models[0]) || '',
-          providerId: p.id,
-        });
-      });
       row.appendChild(testBtn);
       card.appendChild(row);
+
+      const modelRow = document.createElement('div');
+      modelRow.className = 'provider-card-row';
+      const modelInput = document.createElement('input');
+      modelInput.type = 'text';
+      modelInput.className = 'provider-key-input';
+      modelInput.placeholder = '模型列表，逗号分隔';
+      modelInput.value = (settingsPresetModels[p.id] || p.models || []).join(', ');
+      modelInput.dataset.providerId = p.id;
+      modelInput.addEventListener('input', () => {
+        settingsPresetModels[p.id] = parseModelList(modelInput.value);
+      });
+      modelRow.appendChild(modelInput);
+      card.appendChild(modelRow);
 
       const resultEl = document.createElement('div');
       resultEl.className = 'test-result';
       card.appendChild(resultEl);
 
+      testBtn.addEventListener('click', () => {
+        const key = keyInput.value.trim() || (p.hasEnvKey ? '__ENV__' : '');
+        const models = parseModelList(modelInput.value);
+        if (!key) { resultEl.textContent = '请先输入 API Key'; resultEl.className = 'test-result error'; return; }
+        if (!models.length) { resultEl.textContent = '需要提供模型名称'; resultEl.className = 'test-result error'; return; }
+        runTest(testBtn, resultEl, {
+          type: p.type,
+          baseUrl: p.baseUrl || '',
+          apiKey: key,
+          model: models[0],
+          providerId: p.id,
+        });
+      });
       tabPresetEl.appendChild(card);
     });
   }
@@ -1335,10 +1450,15 @@ import {
       for (const [k, v] of Object.entries(settingsKeys)) {
         if (v && v.trim()) cleanKeys[k] = v.trim();
       }
+      const cleanPresetModels = {};
+      for (const preset of settingsPresets) {
+        const models = parseModelList((settingsPresetModels[preset.id] || preset.models || []).join(', '));
+        if (models.length) cleanPresetModels[preset.id] = models;
+      }
       await fetch('/api/custom-providers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keys: cleanKeys, custom: settingsCustom }),
+        body: JSON.stringify({ keys: cleanKeys, presetModels: cleanPresetModels, custom: settingsCustom }),
       });
       // Refresh provider list
       await fetchProviders();

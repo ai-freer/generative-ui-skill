@@ -86,9 +86,9 @@ For continuous-input explainers and calculators, prefer sliders + live readouts.
 <script>
   function updateInterest() {
     const years = Number(document.getElementById('years').value);
-    const total = Math.round(1000 * Math.pow(1.07, years));
+    const total = 1000 * Math.pow(1.07, years);
     document.getElementById('years-out').textContent = years;
-    document.getElementById('result').textContent = `£${total.toLocaleString()}`;
+    document.getElementById('result').textContent = `£${total.toFixed(0)}`;
   }
 </script>
 ```

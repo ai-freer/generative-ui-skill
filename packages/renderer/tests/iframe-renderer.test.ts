@@ -38,6 +38,7 @@ describe('buildWidgetDoc', () => {
     const doc = buildWidgetDoc('<p>test</p>');
     expect(doc).toContain('__widgetSendMessage');
     expect(doc).toContain('reportHeight');
+    expect(doc).toContain('measureSceneHeight');
     expect(doc).toContain('fixContrast');
     expect(doc).toContain('widgetReady');
     expect(doc).toContain('MutationObserver');
@@ -71,5 +72,19 @@ describe('buildWidgetDoc', () => {
   it('defaults maxHeight to 800', () => {
     const doc = buildWidgetDoc('<p>test</p>');
     expect(doc).toContain('__maxH=800');
+  });
+
+  it('includes injectCode message handler', () => {
+    const doc = buildWidgetDoc('<p>test</p>');
+    expect(doc).toContain('injectCode');
+    expect(doc).toContain('injectCodeBlock');
+    expect(doc).not.toContain('(0,eval)');
+  });
+
+  it('includes 3D boot fallback for canvas widgets', () => {
+    const doc = buildWidgetDoc('<canvas id="c"></canvas><script>function init(){}</script>');
+    expect(doc).toContain('tryBoot3DScene');
+    expect(doc).toContain('schedule3DBoot');
+    expect(doc).toContain('if(typeof init!=="function")return false;');
   });
 });

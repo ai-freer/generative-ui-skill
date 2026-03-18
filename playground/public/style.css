@@ -570,7 +570,17 @@ body {
   border: 1px solid var(--border);
   border-radius: 8px;
   resize: none;
-  min-height: 44px;
+  min-height: 104px;
+  height: 104px;
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 104px;
 }
 
 .input:focus {
@@ -578,21 +588,39 @@ body {
   border-color: var(--accent);
 }
 
+.btn-clean-run,
 .send {
-  padding: 0.6rem 1.2rem;
+  width: 100%;
+  padding: 0.5rem 0.5rem;
   font: inherit;
   font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  min-height: 48px;
+  text-align: center;
+}
+
+.btn-clean-run {
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+}
+
+.btn-clean-run:hover {
+  background: var(--accent-bg);
+}
+
+.send {
   color: white;
   background: var(--accent);
   border: none;
-  border-radius: 8px;
-  cursor: pointer;
 }
 
 .send:hover {
   opacity: 0.9;
 }
 
+.btn-clean-run:disabled,
 .send:disabled {
   opacity: 0.5;
   cursor: not-allowed;

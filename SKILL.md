@@ -91,6 +91,48 @@ Widget 内的外部资源只能从以下 CDN 加载（CSP 强制执行）：
 - `connect-src 'none'` 禁止 fetch / XHR / WebSocket
 - 链接点击被拦截，由宿主应用处理
 
+## 渠道适配：Widget 截图与投递（M3）
+
+在 Telegram、飞书等非 Web 渠道，widget 无法直接渲染为 iframe。Agent 需要在输出 `show-widget` 围栏后，主动调用截图脚本将 widget 渲染为 PNG 图片并发送给用户。
+
+> Web Playground 和 Aight App 支持直接渲染 widget，无需执行此步骤。
+
+### 截图流程
+
+1. 输出 `show-widget` 围栏后，调用截图脚本（通过 exec 工具）：
+
+```
+exec: echo '<模型回复全文>' | node scripts/widget-screenshot.mjs --title "<widget_title>"
+```
+
+脚本会从回复中提取对应的 show-widget 围栏，渲染为 PNG，输出文件路径。
+
+2. 用 send action 发送图片到当前会话：
+
+```
+send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
+```
+
+3. 如果 widget 包含 drill-down 按钮（`__widgetSendMessage` 调用），可以提取按钮列表：
+
+```
+exec: echo '<widget_code>' | node scripts/widget-drilldown.mjs
+```
+
+然后在 send action 中附加 buttons 参数，让用户可以点击追问。
+
+### 脚本参数
+
+| 脚本 | 参数 | 说明 |
+|------|------|------|
+| `widget-screenshot.mjs` | `--title <name>` | 从 stdin 的模型输出中按 title 提取 widget 并截图 |
+| | `--file <path>` | 直接截图一个 HTML 文件 |
+| | `--output <path>` | 指定输出 PNG 路径（默认自动生成临时路径） |
+| | `--theme light\|dark` | 截图主题（默认 light） |
+| | `--width <px>` | 视口宽度（默认 680） |
+| `widget-drilldown.mjs` | `--code <html>` | 从 widget_code 中提取 drill-down 按钮 |
+| | `--file <path>` | 从文件中提取 |
+
 ## 相关项目
 
 - 渲染运行时（`@generative-ui/renderer`）—— 见 M2 里程碑

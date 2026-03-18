@@ -25,11 +25,16 @@ const PROVIDERS_PATH = join(__dirname, 'providers.json');
 const CUSTOM_PROVIDERS_PATH = join(__dirname, 'custom-providers.json');
 
 function loadCustomProviders() {
-  if (!existsSync(CUSTOM_PROVIDERS_PATH)) return { keys: {}, custom: [] };
+  if (!existsSync(CUSTOM_PROVIDERS_PATH)) return { keys: {}, presetModels: {}, custom: [] };
   try {
-    return JSON.parse(readFileSync(CUSTOM_PROVIDERS_PATH, 'utf8'));
+    const data = JSON.parse(readFileSync(CUSTOM_PROVIDERS_PATH, 'utf8'));
+    return {
+      keys: data.keys || {},
+      presetModels: data.presetModels || {},
+      custom: data.custom || [],
+    };
   } catch (_) {
-    return { keys: {}, custom: [] };
+    return { keys: {}, presetModels: {}, custom: [] };
   }
 }
 
@@ -47,6 +52,9 @@ function loadProviders() {
     if (p.modelsEnv && !p.models) {
       const envVal = process.env[p.modelsEnv];
       p.models = envVal ? envVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+    }
+    if (customData.presetModels?.[p.id]?.length) {
+      p.models = customData.presetModels[p.id];
     }
   }
 
@@ -190,7 +198,7 @@ app.get('/api/all-providers', (req, res) => {
       type: p.type,
       apiKeyEnv: p.apiKeyEnv,
       baseUrl: p.baseUrl || '',
-      models: p.models || [],
+      models: customData.presetModels?.[p.id]?.length ? customData.presetModels[p.id] : (p.models || []),
       hasEnvKey: !!(process.env[p.apiKeyEnv] && process.env[p.apiKeyEnv].trim()),
       hasSavedKey: !!customData.keys[p.id],
     }));
@@ -245,9 +253,10 @@ app.get('/api/custom-providers', (req, res) => {
 
 app.post('/api/custom-providers', (req, res) => {
   try {
-    const { keys, custom } = req.body;
+    const { keys, presetModels, custom } = req.body;
     const data = loadCustomProviders();
     if (keys && typeof keys === 'object') data.keys = { ...data.keys, ...keys };
+    if (presetModels && typeof presetModels === 'object') data.presetModels = presetModels;
     if (Array.isArray(custom)) data.custom = custom;
     saveCustomProviders(data);
     res.json({ ok: true });
@@ -373,7 +382,7 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: `model ${model} is not in provider models list` });
   }
 
-  const systemPrompt = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, modules);
+  const systemPrompt = loadSystemPrompt(PROMPTS_DIR, GUIDELINES_DIR, modules, { providerId, model });
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -888,14 +897,22 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Detect which guideline modules were actually used in the output
-    const finalContent = fullStreamedText || '';
-    const usedModules = ['core']; // core is always considered used
-    if (/<svg[\s>]/i.test(finalContent)) usedModules.push('diagram');
-    if (/new\s+Chart\s*\(|chart\.js|<canvas/i.test(finalContent)) usedModules.push('chart');
-    if (/onclick\s*=|oninput\s*=|onchange\s*=|addEventListener/i.test(finalContent)) usedModules.push('interactive');
-    if (/mockup|prototype|wireframe|app-screen|phone-frame/i.test(finalContent)) usedModules.push('mockup');
-    if (/illustration|artistic|organic.*path|pattern.*fill|gradient.*stop/i.test(finalContent)) usedModules.push('art');
+    // Detect which guideline modules were actually used in the output.
+    // Each detector targets patterns unique to that module's output type.
+    const fc = fullStreamedText || '';
+    const usedModules = ['core'];
+    const hasSvg = /<svg[\s>]/i.test(fc);
+    const hasThreeJs = /THREE\.|three\.module|OrbitControls|three(?:\.min)?\.js/i.test(fc);
+    const hasChartJs = /new\s+Chart\s*\(|Chart\.js\/[\d.]+\/chart/i.test(fc);
+    const hasUiComponents = /var\(--color-|var\(--border-radius|<input[\s>]|<select[\s>]|<textarea[\s>]|type=["']range["']/i.test(fc);
+    // Art: SVG with organic shapes / layered fills, no structural diagram markers
+    const hasDiagramMarkers = /<rect[\s>]|<line[\s>]|marker-end|<foreignObject/i.test(fc);
+    const hasArtMarkers = /<ellipse[\s>]|<circle[\s>]|opacity=["']0\.\d/i.test(fc);
+    if (hasSvg && !hasThreeJs && hasDiagramMarkers) usedModules.push('diagram');
+    if (hasSvg && !hasThreeJs && hasArtMarkers && !hasDiagramMarkers) usedModules.push('art');
+    if (hasChartJs) usedModules.push('chart');
+    if (hasUiComponents) usedModules.push('interactive');
+    if (hasThreeJs) usedModules.push('3d');
     res.write(`event: modules_used\ndata: ${JSON.stringify([...new Set(usedModules)])}\n\n`);
 
     res.write('data: [DONE]\n\n');

@@ -68,45 +68,45 @@ OpenClaw 的 Skill 有两种影响 agent 行为的方式：
 
 对于 generative-ui，我们已经有了 Prompt Skill（M1 的 `SKILL.md` + `prompts/`）。M3 需要新增一个 **post-processing 脚本**，在 agent 回复包含 `show-widget` 围栏时，自动截图并发送图片。
 
-有两种实现路径：
+Phase 1 调研后确认两种路径的可行性（详见 [`m3-phase1-findings.md`](m3-phase1-findings.md)）：
 
-#### 路径 A：Hook 方式（推荐）
+#### 路径 A：Hook 方式 ~~（推荐）~~ ❌ 不可行
 
-写一个 OpenClaw Hook，监听 `message:sent` 事件。当检测到回复中包含 `show-widget` 围栏时：
-1. 提取 widget_code
-2. 调用 headless browser 截图
-3. 通过 `sendAttachment` action 发送图片到当前渠道
+调研结论：OpenClaw 的 Hook 系统**不支持主动发送消息**。
+- `message_sent` hook 是 fire-and-forget，context 只有只读字段
+- `message_sending` hook 只能修改文本内容或取消发送，不能追加图片
+- Internal hook 的 `messages[]` 只支持纯文本
 
-```
-agent 回复（含 show-widget 围栏）
-  → message:sent hook 触发
-  → 检测围栏 → 提取 widget_code
-  → Playwright 截图 → PNG
-  → sendAttachment → Telegram/Discord/...
-```
+#### 路径 B：Agent 主动调用 ✅ 确认可行
 
-优点：
-- 对 agent 透明，不需要 agent 主动调用截图脚本
-- 适用于所有渠道，不限于 Telegram
-- 不改变现有 Skill 的 prompt
-
-#### 路径 B：Agent 主动调用方式
-
-在 `SKILL.md` 中教 agent：当输出 `show-widget` 围栏后，主动调用截图脚本。
+Agent 通过 `exec` 工具调用截图脚本，再通过 `send` action 发送图片。
 
 ```
-agent 输出 show-widget 围栏
-  → agent 自己调用 exec: node scripts/widget-screenshot.js --code "..."
+Agent 输出 show-widget 围栏
+  → Agent 调用 exec: node scripts/widget-screenshot.mjs --code "..."
   → 脚本截图 → 保存 PNG → 返回文件路径
-  → agent 调用 sendAttachment 发送图片
+  → Agent 调用 send action（media 参数传本地路径 + buttons 参数传 drill-down）
 ```
 
-缺点：
-- 需要 agent 额外的 tool call 轮次（增加延迟和 token 消耗）
-- agent 可能忘记调用
-- 需要修改 system prompt
+Telegram `send` action 确认支持：`to`, `message`, `media`（本地路径）, `buttons`（inline keyboard）, `caption`
+飞书 outbound adapter 确认支持：本地图片路径自动上传、Markdown 卡片、结构化卡片、按钮回调
 
-**建议选路径 A（Hook 方式）**，更可靠且对 agent 透明。
+#### 路径 B+：Agent 主动调用 + message_sending 清洗（推荐）
+
+在路径 B 基础上，增加一个 `message_sending` Plugin Hook，在消息发送前把 `show-widget` 围栏替换为 Layer 1 Summary 纯文本。这样用户先看到干净的文字回复，图片随后到达。
+
+```
+Agent 输出 show-widget 围栏
+  │
+  ├─ message_sending hook 触发（Plugin Hook）
+  │   → 检测围栏 → 替换为 Layer 1 Summary 纯文本
+  │   → 用户先看到干净的文字回复
+  │
+  └─ Agent 接着调用 exec + send action
+      → 截图 → 发送图片 + drill-down 按钮
+```
+
+**选定路径 B+** 作为实现方案。
 
 ### S1：Widget Interceptor（Node.js）
 
@@ -229,100 +229,70 @@ export function extractDrillDowns(widgetCode) {
 }
 ```
 
-### S4：OpenClaw Hook 集成
+### S4：SKILL.md 截图指令 + 可选 Plugin Hook
 
-这是最关键的集成点。需要研究 OpenClaw Hook 的具体注册和执行方式。
+> Phase 1 调研结论：Hook 不能主动发送消息，改用 Agent 主动调用方案（路径 B+）。
+> 详见 [`m3-phase1-findings.md`](m3-phase1-findings.md)
 
-从源码看到：
-- Hook 有 `HOOK.md`（frontmatter 描述）+ `handler.ts`（处理逻辑）
-- Hook 通过 `events` 字段声明监听的事件
-- `message:sent` 事件在消息发送后触发，包含 `content`、`channelId`、`conversationId` 等上下文
+#### S4a：修改 SKILL.md
 
-Hook 结构：
+在现有 `SKILL.md` 中追加一段，教 agent 在非满血渠道（Telegram/飞书等）输出 widget 后主动截图并发送：
 
-```
-generative-ui/
-  hooks/
-    widget-renderer/
-      HOOK.md          ← Hook 描述 + 元数据
-      handler.mjs      ← 处理逻辑
-```
-
-`HOOK.md`:
 ```markdown
----
-name: widget-renderer
-description: Detects show-widget fences in agent replies and sends rendered PNG screenshots to the channel.
-metadata:
-  openclaw:
-    emoji: "🎨"
-    events: ["message:sent"]
-    requires:
-      bins: ["node"]
----
+## Widget 截图与投递（非 Web/Aight 渠道）
 
-# Widget Renderer Hook
+当你在 Telegram、飞书等渠道输出 `show-widget` 围栏后，必须执行以下步骤将 widget 渲染为图片并发送给用户：
 
-Automatically renders `show-widget` code fences as PNG images and sends them to the current channel.
+1. 调用截图脚本：
+   ```
+   exec: node scripts/widget-screenshot.mjs --title "widget_title"
+   ```
+   脚本会从你最近的回复中提取 show-widget 围栏，渲染为 PNG，返回文件路径。
+
+2. 用 send action 发送图片：
+   ```
+   send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
+   ```
+
+3. 如果 widget 包含 drill-down 按钮，在 send action 中附加 buttons 参数。
+
+注意：在 Web Playground 和 Aight App 中不需要执行此步骤，这些渠道支持直接渲染 widget。
 ```
 
-`handler.mjs`:
-```javascript
-import { interceptWidgets } from '../../scripts/widget-interceptor.mjs';
-import { captureWidget } from '../../scripts/widget-screenshot.mjs';
-import { extractDrillDowns } from '../../scripts/widget-drilldown.mjs';
+#### S4b：可选 message_sending Plugin Hook（围栏清洗）
 
-export default async function handler(event, context) {
-  const { content, channelId, conversationId } = event;
+作为 OpenClaw Plugin 注册一个 `message_sending` hook，在消息发送前把 `show-widget` 围栏替换为 Layer 1 Summary 纯文本，避免用户看到原始 HTML/SVG 代码。
 
-  const result = interceptWidgets(content);
-  if (!result.hasWidget) return;
-
-  for (const widget of result.widgets) {
-    // 截图
-    const png = await captureWidget(widget.widgetCode);
-
-    // 保存到临时文件
-    const tmpPath = `/tmp/widget-${Date.now()}.png`;
-    await fs.writeFile(tmpPath, png);
-
-    // 通过 OpenClaw channel action 发送图片
-    await context.sendAttachment({
-      channelId,
-      conversationId,
-      filePath: tmpPath,
-      caption: widget.title,
+```typescript
+// Plugin hook 注册
+{
+  hookName: 'message_sending',
+  handler: (event, ctx) => {
+    const { content } = event;
+    // 检测 show-widget 围栏
+    const fenceRegex = /```show-widget\s*\n[\s\S]*?```/g;
+    if (!fenceRegex.test(content)) return;
+    // 替换为纯文本摘要（提取 title 字段）
+    const cleaned = content.replace(fenceRegex, (match) => {
+      const titleMatch = match.match(/"title"\s*:\s*"([^"]+)"/);
+      const title = titleMatch ? titleMatch[1] : 'widget';
+      return `[📊 ${title} — 图表生成中...]`;
     });
-
-    // 提取 drill-down 按钮（如果渠道支持 buttons）
-    const drillDowns = extractDrillDowns(widget.widgetCode);
-    if (drillDowns.length > 0 && context.channelCapabilities?.includes('buttons')) {
-      // 发送 inline buttons
-      // 具体 API 取决于 OpenClaw 的 channel action 接口
-    }
+    return { content: cleaned };
   }
 }
 ```
 
-> **注意**：上面的 `context.sendAttachment` 和 `context.channelCapabilities` 是推测的 API。需要进一步确认 OpenClaw Hook handler 的实际 context 接口。这是 M3a 的首要调研任务。
+这个 Hook 是可选的增强——即使没有它，Agent 的文字回复中包含围栏代码也不会导致功能问题，只是 UX 不够干净。
 
-### S4 的调研清单
+#### Phase 1 调研清单（已完成 ✅）
 
-在开始编码前，需要确认：
-
-1. **Hook handler 的 context 对象有哪些方法？** 特别是能否发送附件、获取渠道能力。
-   - 查看 `src/hooks/internal-hooks.ts` 中 `MessageSentHookContext` 的定义
-   - 查看 `src/channels/plugins/types.adapters.ts` 中 `ChannelOutboundAdapter` 的接口
-
-2. **Hook 能否在 message:sent 之后追加发送新消息？** 还是只能修改即将发送的消息？
-   - 如果只能修改，需要换成 `message:before-send` 事件，把 widget 围栏替换为"[图表见下方]"占位符
-
-3. **OpenClaw 的 `sendAttachment` action 具体怎么调用？**
-   - 查看 Telegram channel plugin 的 `sendAttachment` 实现
-   - 确认是否支持 inline keyboard
-
-4. **Hook 是否能访问 Playwright？** 或者需要通过 exec 调用外部脚本？
-   - OpenClaw 有 `Dockerfile.sandbox-browser`，但 Hook 可能运行在 sandbox 内
+| 问题 | 结论 |
+|------|------|
+| Hook 能否主动发送消息？ | ❌ 不能。`message_sent` 是 fire-and-forget，`message_sending` 只能修改文本 |
+| `send` action 怎么调用？ | Agent tool call，支持 `to`, `message`, `media`（本地路径）, `buttons` |
+| 飞书插件能力？ | ✅ 完整：Markdown 卡片、结构化卡片、图片上传、按钮回调 |
+| Playwright 可用性？ | ✅ `Dockerfile.sandbox-browser` 预装 Chromium。VPS 需确认 exec 环境 |
 
 ---
 
@@ -330,24 +300,34 @@ export default async function handler(event, context) {
 
 ### 测试环境
 
+开发在本地 MacBook，测试在 VPS 上的 OpenClaw 实例。
+
 ```
+本地 MacBook（开发）
+  ├── generative-ui 项目
+  │   ├── scripts/widget-screenshot.mjs（截图脚本）
+  │   ├── scripts/widget-drilldown.mjs（drill-down 提取）
+  │   └── 独立测试（Playwright 截图验证）
+  │
+  └── git push → VPS 拉取
+
 VPS (OpenClaw Gateway)
   ├── OpenClaw daemon
-  │   ├── generative-ui Skill（M1 prompt）
-  │   ├── widget-renderer Hook（M3a）
-  │   └── Telegram channel plugin
+  │   ├── generative-ui Skill（M1 prompt + M3 截图指令）
+  │   ├── widget-text-cleaner Plugin Hook（可选，围栏清洗）
+  │   └── Telegram / 飞书 channel plugin
   │
-  ├── Playwright + Chromium（截图服务）
+  ├── Chromium（截图用，sandbox-browser 或系统安装）
   │
   └── Telegram Bot API ←→ Telegram
 ```
 
 ### 部署步骤
 
-1. 在 VPS 的 OpenClaw 实例中安装 generative-ui Skill
-2. 安装 widget-renderer Hook
-3. 确保 Playwright + Chromium 可用（`npx playwright install chromium`）
-4. 在 Telegram 中测试
+1. 本地开发完成后，push 到 repo
+2. 在 VPS 上拉取最新代码，安装 generative-ui Skill 到 OpenClaw 实例
+3. 确保 Chromium 可用（`npx playwright install chromium` 或使用系统 chromium）
+4. 在 Telegram 中测试 agent 输出 widget → 截图 → 发送图片的完整链路
 
 ### 测试用例
 
@@ -477,63 +457,57 @@ export function widgetToFeishuCard(widget) {
 
 ### S4c：飞书 Hook 集成
 
-在 widget-renderer Hook 中增加飞书分支：
+### S4c：飞书适配（Phase 1 调研更新）
 
-```javascript
-// handler.mjs 中的渠道分发逻辑
-async function handleWidget(widget, channelId, context) {
-  if (channelId === 'feishu' || channelId === 'lark') {
-    // 飞书：先尝试卡片映射
-    const card = widgetToFeishuCard(widget);
-    if (card) {
-      // 策略 C：发送交互卡片
-      await context.sendCard({ channelId, card });
-      return;
-    }
-    // 卡片映射失败 → 回退截图，但用飞书图片卡片包装
-    const png = await captureWidget(widget.widgetCode);
-    const tmpPath = saveTempFile(png);
-    // 飞书图片卡片（比裸图片好看）
-    const imageCard = {
-      config: { wide_screen_mode: true },
-      elements: [
-        { tag: 'img', img_key: await uploadToFeishu(tmpPath), alt: { tag: 'plain_text', content: widget.title } },
-        // 附加 drill-down 按钮
-        ...buildDrillDownActions(widget.widgetCode),
-      ],
-    };
-    await context.sendCard({ channelId, card: imageCard });
-  } else {
-    // Telegram / 其他渠道：截图 + sendAttachment
-    const png = await captureWidget(widget.widgetCode);
-    const tmpPath = saveTempFile(png);
-    await context.sendAttachment({ channelId, filePath: tmpPath, caption: widget.title });
+> Phase 1 调研确认：OpenClaw 已有完整的飞书 channel plugin（`extensions/feishu/`），能力比预期更强。
+
+飞书 outbound adapter 已内置的能力：
+- **自动卡片渲染**：文本包含代码块或表格时，自动切换为 Markdown 卡片（`sendStructuredCardFeishu`）
+- **本地图片路径自动上传**：outbound adapter 检测到本地图片路径时，自动调用 `sendMediaFeishu` 上传
+- **卡片按钮回调**：`card-interaction.ts` 有完整的 `FeishuCardInteractionEnvelope` 解码/验证/路由机制
+
+这意味着飞书适配的工作量比原计划小：
+
+| Widget 类型 | 实现方式 | 复杂度 |
+|------------|---------|--------|
+| 视觉型（SVG/Chart.js） | 截图 PNG → Agent 调用 send（media 传本地路径，飞书自动上传） | 低（复用 S2） |
+| 结构化（指标卡片/表格） | 截图 PNG 为主；或利用飞书自动 Markdown 卡片渲染 | 低 |
+| 交互型（计算器等） | 策略 D：widget 存储到临时 URL → 卡片内嵌"打开交互版"按钮 | 中（需 widget hosting） |
+
+Agent 在飞书渠道的截图+发送流程与 Telegram 一致（路径 B+），飞书 outbound adapter 会自动处理图片上传和卡片渲染。
+
+### S4d：飞书按钮回调处理
+
+飞书卡片按钮回调已有完整机制（`card-interaction.ts`）：
+
+```typescript
+// FeishuCardInteractionEnvelope 结构
+{
+  oc: "ocf1",           // 版本标识
+  k: "button",          // 交互类型：button | quick | meta
+  a: "drill_down",      // action 名称
+  q: "详细介绍 JWT 签名过程",  // query 文本
+  c: {                  // 上下文
+    u: "user_open_id",
+    h: "chat_id",
+    t: "p2p" | "group"
   }
 }
 ```
 
-### S4d：飞书按钮回调处理
+Drill-down 按钮的实现思路：
+- 截图脚本提取 `__widgetSendMessage` 调用 → 生成按钮列表
+- Agent 在 send action 中附加 buttons 参数，value 使用 `FeishuCardInteractionEnvelope` 格式
+- 用户点击按钮 → 飞书 card action 回调 → OpenClaw 飞书 plugin 解码 → 转为用户消息 → Agent 处理追问
 
-飞书卡片按钮点击会触发 action 回调。需要在 Hook 或 Skill 中处理：
+### 飞书适配的调研清单（已完成 ✅）
 
-```javascript
-// 飞书卡片按钮回调
-// 当用户点击 drill-down 按钮时，飞书会发送 action 回调
-// OpenClaw 的飞书 channel plugin 应该能将这个回调转换为用户消息
-
-// 回调 payload 示例：
-// { action: { value: { action: "drill_down", query: "详细介绍 JWT 签名过程" } } }
-// → 转换为用户消息 "详细介绍 JWT 签名过程" → agent 处理追问
-```
-
-### 飞书适配的调研清单
-
-1. **OpenClaw 是否有飞书 channel plugin？** 搜索 `extensions/` 目录
-   - 如果没有，飞书适配需要先写 channel plugin（工作量大）
-   - 如果有，确认它是否支持 `sendCard` / Message Card API
-2. **飞书 Bot API 的 Message Card 发送方式** — 需要 `app_id` + `app_secret`，通过 REST API 发送
-3. **飞书图片上传** — 卡片内嵌图片需要先上传到飞书获取 `img_key`
-4. **飞书卡片按钮回调** — 需要配置回调 URL，OpenClaw Gateway 是否能接收？
+| 问题 | 结论 |
+|------|------|
+| OpenClaw 是否有飞书 channel plugin？ | ✅ `extensions/feishu/`，功能完整 |
+| 飞书是否支持 sendCard / Message Card？ | ✅ `sendStructuredCardFeishu`、`sendMarkdownCardFeishu` |
+| 飞书图片上传？ | ✅ outbound adapter 自动处理本地路径上传 |
+| 飞书卡片按钮回调？ | ✅ `card-interaction.ts` 有完整的解码/路由机制 |
 
 ---
 
@@ -670,30 +644,33 @@ func userContentController(_ controller: WKUserContentController,
 ## 开发顺序
 
 ```
-Phase 1 — 调研（1-2 天）
-  确认 OpenClaw Hook handler 的 context API
-  确认 sendAttachment 的调用方式
-  确认 Playwright 在 OpenClaw sandbox 中的可用性
-  确认 OpenClaw 是否有飞书 channel plugin
+Phase 1 — 调研（已完成 ✅）
+  确认 Hook 不能主动发送消息 → 选定路径 B+
+  确认 send action 支持 media + buttons
+  确认飞书插件能力完整
+  确认 Chromium 在 sandbox 中可用
 
-Phase 2 — M3a 核心实现（3-5 天）
+Phase 2 — M3a 核心实现（本地 MacBook 开发）
   S1 Widget Interceptor（复用 M2 parseShowWidgetFence）
   S2 Screenshot Service（Playwright + buildWidgetDoc）
   S3 Drill-down 提取
-  S4 Hook 集成
+  S4a SKILL.md 追加截图指令
+  S4b 可选 message_sending Plugin Hook（围栏清洗）
+  本地独立测试（截图验证、interceptor 验证）
 
-Phase 3 — M3b Telegram 联调（2-3 天）
-  部署到 VPS
+Phase 3 — M3b Telegram 联调（VPS 部署测试）
+  Push 到 repo → VPS 拉取安装 Skill
+  确认 Chromium 在 VPS exec 环境可用
   Telegram 端到端测试
   修复问题
 
-Phase 4 — M3b+ 飞书卡片适配（3-5 天）
-  S4b 飞书 Message Card 映射器
-  S4c 飞书 Hook 集成（渠道分发逻辑）
-  S4d 飞书按钮回调处理
+Phase 4 — M3b+ 飞书适配（VPS 部署测试）
+  飞书截图 → 图片卡片（复用 S2）
+  飞书 Markdown 卡片（结构化 widget）
+  飞书按钮回调 → drill-down
   飞书端到端测试
 
-Phase 5 — M3c Aight（3-5 天，需 iOS 配合）
+Phase 5 — M3c Aight（需 iOS 配合）
   S5 壳页面
   S6 Swift 集成
   S7 联调测试
@@ -703,25 +680,32 @@ Phase 5 — M3c Aight（3-5 天，需 iOS 配合）
 
 ## 风险与决策点
 
-### 1. Hook vs Agent 主动调用
+### 1. ~~Hook vs Agent 主动调用~~ ✅ 已决策
 
-如果 OpenClaw Hook 的 `message:sent` 事件不支持追加发送新消息（只能修改当前消息），需要改用路径 B（agent 主动调用截图脚本）。这会增加 prompt 复杂度和 token 消耗。
+Phase 1 调研确认：Hook 不能主动发送消息。选定路径 B+（Agent 主动调用 + message_sending 围栏清洗）。
 
-→ **行动**：Phase 1 调研时确认。
+### 2. Playwright 在 exec 环境中的可用性
 
-### 2. Playwright 在 OpenClaw sandbox 中的可用性
+OpenClaw 的 `exec` 工具可能在 Docker sandbox 中运行脚本。`Dockerfile.sandbox-browser` 预装了 Chromium，但需要在 VPS 上实测确认 exec 脚本是否能访问 Chromium。
 
-OpenClaw 的 exec 工具可能在 Docker sandbox 中运行脚本。需要确认 sandbox 是否有 Chromium。`Dockerfile.sandbox-browser` 的存在是好信号。
+→ **行动**：M3b 部署到 VPS 时实测。如果 sandbox 内无法访问 Chromium，备选方案是在 Gateway 主进程侧安装 Chromium，截图脚本通过 HTTP 调用。
 
-→ **行动**：在 VPS 上测试 `npx playwright install chromium` 是否可行。
+### 3. Agent 忘记调用截图脚本
 
-### 3. 截图延迟
+路径 B 的固有风险：agent 可能输出 widget 围栏后忘记调用截图脚本。
 
-Playwright 截图需要 1-3 秒（启动页面 + 等待渲染 + 截图）。在 Telegram 中，用户会先看到文字回复，然后 1-3 秒后收到图片。这个延迟是否可接受？
+→ **缓解**：
+- 在 SKILL.md 中用强指令（"你**必须**在输出 show-widget 围栏后立即调用截图脚本"）
+- message_sending Hook 作为兜底，至少保证用户不会看到原始代码
+- 后续可以考虑在 `message_sent` hook 中检测是否有未截图的围栏，记录日志告警
+
+### 4. 截图延迟
+
+Playwright 截图需要 1-3 秒。在 Telegram 中，用户会先看到文字回复（围栏已被清洗为纯文本摘要），然后 1-3 秒后收到图片。
 
 → **缓解**：保持 browser 实例常驻，避免每次冷启动。首次截图慢，后续复用 browser context。
 
-### 4. Aight 的 JS 资源打包
+### 5. Aight 的 JS 资源打包
 
 WKWebView 加载本地 HTML 时，`@generative-ui/renderer` 的 dist JS 需要打包进 Aight 的 app bundle。需要确定：
 - 直接 copy `dist/index.js` 到 Xcode 项目？
