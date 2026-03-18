@@ -23,6 +23,17 @@ The goal of this project is to abstract that capability into a **general-purpose
 
 ---
 
+## Current Release Status
+
+This repository is currently published with the following practical status:
+
+- `main` is the deployable Web Playground line, representing the currently usable outcome of **M1 + M2**.
+- `m3/channel-adapters` is the dedicated channel-adapter branch. It already contains **M3a prototype scripts**, but it has **not** completed real channel integration and end-to-end validation for Telegram, Feishu, or other outbound channels.
+
+In other words, the project is already usable today as an open-source local Web Playground, while the multi-channel delivery layer is still under active follow-up development.
+
+---
+
 ## Core Architecture
 
 The solution is split into three layers: **Prompt Skill -> Rendering Runtime -> Channel Adapter Layer**, with clear separation between them.
@@ -122,6 +133,30 @@ The playground includes:
 - Four example widgets in `examples/`: a flowchart, a chart, a calculator, and a comparison view
 
 The playground also serves as the prototype validation environment for the M2 rendering runtime. `playground/public/app.js` already verifies the full three-stage rendering pipeline, and M2 is being extracted from that implementation into a reusable library.
+
+### How to Use Playground
+
+This project is open-sourced for self-hosted and local use. There is currently no shared hosted demo with centrally managed API keys.
+
+To use the playground yourself:
+
+1. Clone this repository locally.
+2. Create your own `playground/.env` from `playground/.env.example`.
+3. Fill in your own provider API keys such as OpenAI-, Anthropic-, or compatible-provider credentials.
+4. Install dependencies and start the local server.
+5. Open `http://localhost:3456` in your browser and select the provider/model you want to test.
+
+Example:
+
+```bash
+git clone https://github.com/ai-freer/generative-ui-skill.git
+cd generative-ui-skill/playground
+cp .env.example .env
+npm install
+npm start
+```
+
+If you want to share it inside your own team, the recommended path is to deploy the playground in your own environment and let each team or deployment manage its own API keys.
 
 ---
 

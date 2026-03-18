@@ -23,6 +23,17 @@
 
 ---
 
+## 当前发布状态
+
+当前仓库对外发布时，建议按下面这个口径理解项目状态：
+
+- `main`：可部署、可使用的 **Web Playground 主线**，代表目前已经可交付的 **M1 + M2** 成果。
+- `m3/channel-adapters`：渠道适配专项分支，已经有 **M3a 原型脚本**，但 **尚未完成** Telegram、飞书等真实渠道的联调与端到端验证。
+
+也就是说，项目现在已经适合作为开源的本地 Web Playground 使用；而多渠道投递能力仍然属于后续持续开发中的部分。
+
+---
+
 ## 核心架构
 
 整个方案分为三层：**Prompt Skill → 渲染运行时 → 渠道适配层**，逐层解耦。
@@ -114,6 +125,31 @@ Playground 包含：
 - 4 个示例 widget（`examples/` 目录：流程图、图表、计算器、对比图）
 
 Playground 同时也是 M2 渲染运行时的原型验证环境 —— `playground/public/app.js` 中已验证了完整的三阶段渲染流水线，M2 在此基础上提取为可复用库。
+
+### 如何使用 Playground
+
+当前项目采用开源自用方式提供，不提供带统一 API Key 的公共托管试玩环境。
+
+如果你想自己使用 Playground，推荐按下面方式操作：
+
+1. 把仓库 clone 到本地。
+2. 进入 `playground/` 目录。
+3. 用 `playground/.env.example` 复制出自己的 `.env`。
+4. 填入你自己的模型服务 API Key，例如 OpenAI、Anthropic 或兼容 provider。
+5. 安装依赖并启动本地服务。
+6. 在浏览器中打开 `http://localhost:3456`，选择 provider / model 后开始测试。
+
+示例命令：
+
+```bash
+git clone https://github.com/ai-freer/generative-ui-skill.git
+cd generative-ui-skill/playground
+cp .env.example .env
+npm install
+npm start
+```
+
+如果你想在团队内部共享，建议自行部署一份 Playground，并由各自环境独立管理 API Key。
 
 ---
 
