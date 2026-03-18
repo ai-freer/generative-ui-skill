@@ -141,22 +141,23 @@ This project is open-sourced for self-hosted and local use. There is currently n
 To use the playground yourself:
 
 1. Clone this repository locally.
-2. Create your own `playground/.env` from `playground/.env.example`.
-3. Fill in your own provider API keys such as OpenAI-, Anthropic-, or compatible-provider credentials.
-4. Install dependencies and start the local server.
-5. Open `http://localhost:3456` in your browser and select the provider/model you want to test.
+2. Install dependencies and start the local server.
+3. Open `http://localhost:3456` in your browser.
+4. Use the Playground settings UI to configure your provider, API key, and model list.
+5. Start testing with your own provider credentials.
 
 Example:
 
 ```bash
 git clone https://github.com/ai-freer/generative-ui-skill.git
 cd generative-ui-skill/playground
-cp .env.example .env
 npm install
 npm start
 ```
 
-If you want to share it inside your own team, the recommended path is to deploy the playground in your own environment and let each team or deployment manage its own API keys.
+For advanced or repeatable setups, you can also preconfigure `playground/.env` manually from `playground/.env.example`, but that is optional rather than the primary path.
+
+If you want to share it inside your own team, the recommended path is to deploy the playground in your own environment and let each team or deployment manage its own API keys through the UI or environment-based configuration.
 
 ---
 
@@ -199,11 +200,15 @@ Adding a new channel only requires adding a new adapter. It does not affect the 
 
 | Model | Status | Notes |
 |------|---------|------|
-| Claude Sonnet 4.6 | ✅ | Strong price-performance frontier model |
-| Openai GPT 5.4 | ✅ | Strong price-performance frontier model |
-| Kimi K2.5 | ✅ | Visual quality can even exceed Sonnet 4.6 |
-| Seed 2.0 Pro | To be verified | Prompt compliance and generation quality still need testing |
-| Other Markdown-capable models | Theoretically feasible | Prompt compliance still needs validation |
+| Claude Opus 4.6 | ✅ Tested | Best overall stability in the current validation round |
+| Claude Sonnet 4.6 | ✅ Tested | Strong balance between quality and cost |
+| GPT-5.4 | ✅ Tested | Completed the current validation set with solid overall results |
+| Kimi K2.5 | ✅ Tested | Strong visual quality after serial revalidation |
+| Seed 2.0 Pro | ✅ Tested with caveats | Good chart/mockup performance, but still weaker on no-widget restraint |
+| GLM-5 | ✅ Tested | Improved noticeably after serial revalidation |
+| gemini-3.1-pro-preview | Planned | Intended for the next supplementary validation round |
+
+The detailed validation record lives in [`tests/prompt-validation.md`](./tests/prompt-validation.md). The table above reflects the models that have actually been tested in the current repository workflow, plus the next model already queued for follow-up validation.
 
 ### Multi-model Adaptation Strategy
 
