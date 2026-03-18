@@ -122,7 +122,7 @@ npm start              # 启动后访问 http://localhost:3456
 Playground 包含：
 - Express 后端（SSE 流式代理，支持 OpenAI / Anthropic / 兼容 API）
 - Chat UI 前端（流式围栏检测 → 增量 DOM 预览 → sandbox iframe 渲染）
-- 4 个示例 widget（`examples/` 目录：流程图、图表、计算器、对比图）
+- 6 个示例 widget（`examples/` 目录：流程图、图表、计算器、对比图、3D 太阳系场景、3D 酿造流程场景）
 
 Playground 同时也是 M2 渲染运行时的原型验证环境 —— `playground/public/app.js` 中已验证了完整的三阶段渲染流水线，M2 在此基础上提取为可复用库。
 
@@ -134,22 +134,23 @@ Playground 同时也是 M2 渲染运行时的原型验证环境 —— `playgrou
 
 1. 把仓库 clone 到本地。
 2. 进入 `playground/` 目录。
-3. 用 `playground/.env.example` 复制出自己的 `.env`。
-4. 填入你自己的模型服务 API Key，例如 OpenAI、Anthropic 或兼容 provider。
-5. 安装依赖并启动本地服务。
-6. 在浏览器中打开 `http://localhost:3456`，选择 provider / model 后开始测试。
+3. 安装依赖并启动本地服务。
+4. 在浏览器中打开 `http://localhost:3456`。
+5. 优先使用 Playground 自带的配置界面，填写 provider、API Key 和模型列表。
+6. 用你自己的模型服务配置开始测试。
 
 示例命令：
 
 ```bash
 git clone https://github.com/ai-freer/generative-ui-skill.git
 cd generative-ui-skill/playground
-cp .env.example .env
 npm install
 npm start
 ```
 
-如果你想在团队内部共享，建议自行部署一份 Playground，并由各自环境独立管理 API Key。
+如果你是高级用户，或者需要做可重复部署，也可以选择手工编辑 `playground/.env`；但这属于可选方式，不是默认推荐路径。
+
+如果你想在团队内部共享，建议自行部署一份 Playground，并由各自环境通过 GUI 配置或环境变量独立管理 API Key。
 
 ---
 
@@ -192,11 +193,15 @@ npm start
 
 | 模型 | 支持情况 | 备注 |
 |------|---------|------|
-| Claude Sonnet 4.6 | ✅ | 高性价比 Sota 模型 |
-| Openai GPT 5.4 | ✅ | 高性价比 Sota 模型 |
-| Kimi K2.5 | ✅ | 图形质量甚至优于 Sonnet 4.6 |
-| Seed 2.0 Pro | 待验证 | 需测试 prompt 遵循度和生成质量 |
-| 其他 markdown 模型 | 理论可行 | 需验证 prompt 遵循度 |
+| Claude Opus 4.6 | ✅ 已实测 | 当前验证轮次里整体稳定性最好 |
+| Claude Sonnet 4.6 | ✅ 已实测 | 质量与成本平衡较好 |
+| GPT-5.4 | ✅ 已实测 | 已完成当前验证集，整体结果稳定 |
+| Kimi K2.5 | ✅ 已实测 | 串行补测后视觉质量表现较强 |
+| Seed 2.0 Pro | ✅ 已实测（有保留） | 图表和 mockup 表现较好，但在“无 widget 场景”约束上仍偏弱 |
+| GLM-5 | ✅ 已实测 | 串行补测后稳定性明显改善 |
+| gemini-3.1-pro-preview | 待补测 | 计划作为下一轮补充验证模型 |
+
+详细验证记录见 [`tests/prompt-validation.md`](./tests/prompt-validation.md)。上表反映的是当前仓库里已经完成实测的模型，以及已经排入下一轮补测计划的模型。
 
 ### 多模型适应策略
 
