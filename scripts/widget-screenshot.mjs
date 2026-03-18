@@ -46,11 +46,21 @@ async function resolvePlaywright() {
 
 /**
  * Initialize or reuse a Playwright browser instance.
+ *
+ * Supports two modes:
+ * - CDP mode: connect to an existing Chrome via CDP endpoint (set CHROME_CDP_URL env var)
+ *   e.g. CHROME_CDP_URL=http://localhost:9222
+ * - Launch mode: start a new headless Chromium process (default)
  */
 export async function initBrowser() {
   if (browser) return browser;
   const pw = await resolvePlaywright();
-  browser = await pw.chromium.launch({ headless: true });
+  const cdpUrl = process.env.CHROME_CDP_URL;
+  if (cdpUrl) {
+    browser = await pw.chromium.connectOverCDP(cdpUrl);
+  } else {
+    browser = await pw.chromium.launch({ headless: true });
+  }
   return browser;
 }
 
