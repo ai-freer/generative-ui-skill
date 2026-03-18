@@ -41,7 +41,7 @@ generative-ui/
 │       ├── chart.md                # Chart.js 指南
 │       ├── ui-components.md        # UI 组件（指标卡片、交互控件）
 │       └── art.md                  # SVG 插画 / 生成艺术
-├── examples/                       # 4 个完整示例 widget
+├── examples/                       # 6 个完整示例 widget（含 2 个 3D 场景）
 ├── tests/
 │   └── prompt-validation.md        # 验证用例清单
 └── playground/                     # 本地测试环境（M2 原型验证）

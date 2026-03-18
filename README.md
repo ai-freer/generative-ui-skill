@@ -130,7 +130,7 @@ The playground includes:
 
 - An Express backend with SSE streaming proxy support for OpenAI, Anthropic, and compatible APIs
 - A chat UI frontend with streaming fence detection, incremental DOM preview, and sandbox iframe rendering
-- Four example widgets in `examples/`: a flowchart, a chart, a calculator, and a comparison view
+- Six example widgets in `examples/`: a flowchart, a chart, a calculator, a comparison view, a 3D solar-system scene, and a 3D brewing-process scene
 
 The playground also serves as the prototype validation environment for the M2 rendering runtime. `playground/public/app.js` already verifies the full three-stage rendering pipeline, and M2 is being extracted from that implementation into a reusable library.
 

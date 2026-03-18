@@ -122,7 +122,7 @@ npm start              # 启动后访问 http://localhost:3456
 Playground 包含：
 - Express 后端（SSE 流式代理，支持 OpenAI / Anthropic / 兼容 API）
 - Chat UI 前端（流式围栏检测 → 增量 DOM 预览 → sandbox iframe 渲染）
-- 4 个示例 widget（`examples/` 目录：流程图、图表、计算器、对比图）
+- 6 个示例 widget（`examples/` 目录：流程图、图表、计算器、对比图、3D 太阳系场景、3D 酿造流程场景）
 
 Playground 同时也是 M2 渲染运行时的原型验证环境 —— `playground/public/app.js` 中已验证了完整的三阶段渲染流水线，M2 在此基础上提取为可复用库。
 
