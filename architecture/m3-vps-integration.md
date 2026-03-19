@@ -61,16 +61,17 @@ echo 'CHROME_CDP_URL=http://localhost:9222' >> ~/.openclaw/.env
 
 ---
 
-## Step 4：安装 Playwright（仅首次）
+## Step 4：安装 Playwright 客户端（仅首次）
+
+Playwright 是连接 Chrome CDP 的 Node.js SDK，不包含浏览器本身。Chrome/Chromium 的安装和 CDP 端口开放是 OpenClaw 运维层面的前置条件，不属于 Skill 职责。
 
 ```bash
 cd /opt/skills/generative-ui-skill
-npm install playwright
-
-# 如果用 CDP 连接已有 Chrome，不需要安装 Chromium 浏览器
-# 如果需要 Playwright 自带的 Chromium：
-# npx playwright install chromium
+npm install playwright-core
+# playwright-core 只含 CDP 客户端 SDK，不下载浏览器二进制
 ```
+
+> 前置条件：VPS 上已有 Chrome 实例并开启 CDP（`--remote-debugging-port=9222`）
 
 ---
 
