@@ -1,155 +1,155 @@
 ---
 name: generative-ui
-description: "在对话中生成交互式 UI 组件（图表、架构图、流程图、计算器、数据可视化）。Use when: 用户请求可视化、图表、流程图、架构图、对比表、数据展示、交互组件，或任何适合用图形化方式呈现的内容。NOT for: 纯文本问答、代码生成、文件操作。"
+description: "Generate interactive UI components (charts, diagrams, flowcharts, calculators, data visualizations) in conversations. Use when: user requests visualization, charts, flowcharts, architecture diagrams, comparison tables, data displays, interactive components, or any content that benefits from graphical presentation. NOT for: plain text Q&A, code generation, file operations."
 metadata: { "openclaw": { "emoji": "📊", "requires": { "env": ["CHROME_CDP_URL"] } } }
 ---
 
 # Generative UI Skill
 
-让 AI agent 在对话中生成交互式 UI 组件 —— 图表、架构图、计算器、数据可视化。
+Enables AI agents to generate interactive UI components in conversations — charts, diagrams, calculators, data visualizations.
 
-## 概述
+## Overview
 
-本 Skill 通过 System Prompt 注入，教会模型使用 `show-widget` 代码围栏输出可渲染的 HTML/SVG widget。不依赖特定 SDK 或 tool_use 机制，任何能输出 markdown 的模型都能使用。
+This Skill injects a System Prompt that teaches the model to output renderable HTML/SVG widgets using `show-widget` code fences. It does not depend on any specific SDK or tool_use mechanism — any model capable of outputting markdown can use it.
 
-## 安装
+## Setup
 
-将本 Skill 目录添加到 agent 的 skill 列表中，确保 `prompts/system.md` 被注入到模型的 system prompt。
+Add this Skill directory to the agent's skill list. Ensure `prompts/system.md` is injected into the model's system prompt.
 
-## 配置
+## Configuration
 
-根据使用场景，选择注入哪些设计指南模块。每个模块都应与 `prompts/guidelines/core.md` 组合使用。
+Choose which design guideline modules to inject based on the use case. Each module should be combined with `prompts/guidelines/core.md`.
 
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `modules` | 加载哪些指南模块 | `["core"]` |
-| `send_message_fn` | widget 内追问的函数名 | `window.__widgetSendMessage` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `modules` | Which guideline modules to load | `["core"]` |
+| `send_message_fn` | Function name for in-widget follow-up | `window.__widgetSendMessage` |
 
-### 可用模块
+### Available Modules
 
-| 模块 | 加载的指南文件 | 适用场景 |
-|------|-------------|---------|
-| `diagram` | core + color-palette + svg-setup + diagram | 流程图、架构图、示意图 |
-| `chart` | core + ui-components + color-palette + chart | Chart.js 数据图表、仪表板 |
-| `interactive` | core + ui-components + color-palette | 计算器、表单、交互组件 |
-| `mockup` | core + ui-components + color-palette | UI 原型、卡片、布局 |
-| `art` | core + svg-setup + art | SVG 插画、生成艺术 |
+| Module | Guideline Files Loaded | Use Case |
+|--------|----------------------|----------|
+| `diagram` | core + color-palette + svg-setup + diagram | Flowcharts, architecture diagrams, schematics |
+| `chart` | core + ui-components + color-palette + chart | Chart.js data charts, dashboards |
+| `interactive` | core + ui-components + color-palette | Calculators, forms, interactive components |
+| `mockup` | core + ui-components + color-palette | UI prototypes, cards, layouts |
+| `art` | core + svg-setup + art | SVG illustrations, generative art |
 
-## 使用方式
+## Usage
 
-### 1. 注入 System Prompt
+### 1. Inject System Prompt
 
-将 `prompts/system.md` 的内容追加到模型的 system prompt 中。
+Append the contents of `prompts/system.md` to the model's system prompt.
 
-### 2. 按需注入指南模块
+### 2. Inject Guideline Modules as Needed
 
-根据对话场景，将 `prompts/guidelines/` 下对应的指南文件内容追加到 system prompt。共享部分（如 core.md）只需注入一次。
+Based on the conversation context, append the corresponding guideline files from `prompts/guidelines/` to the system prompt. Shared files (e.g. core.md) only need to be injected once.
 
-### 3. 模型输出 Widget
+### 3. Model Outputs Widget
 
-模型会在回复中使用代码围栏输出 widget：
+The model will output widgets using code fences in its response:
 
 ````
-一些文字说明...
+Some explanatory text...
 
 ```show-widget
 {"title": "jwt_auth_flow", "widget_code": "<svg width=\"100%\" viewBox=\"0 0 680 420\">...</svg>"}
 ```
 
-更多文字说明...
+More explanatory text...
 ````
 
-### 4. 前端渲染
+### 4. Frontend Rendering
 
-前端检测到 `show-widget` 围栏后，提取 `widget_code` 并渲染到 iframe 或 DOM 中。
+When the frontend detects a `show-widget` fence, it extracts `widget_code` and renders it in an iframe or DOM element.
 
-## 示例
+## Examples
 
-- `examples/flowchart.html` — JWT 认证流程（SVG 流程图）
-- `examples/chart.html` — 用户增长趋势（Chart.js 折线图 + 指标卡片）
-- `examples/calculator.html` — 复利计算器（交互滑块 + 实时图表）
-- `examples/comparison.html` — REST vs GraphQL 对比（SVG 并排图）
+- `examples/flowchart.html` — JWT auth flow (SVG flowchart)
+- `examples/chart.html` — User growth trend (Chart.js line chart + metric cards)
+- `examples/calculator.html` — Compound interest calculator (interactive sliders + real-time chart)
+- `examples/comparison.html` — REST vs GraphQL comparison (SVG side-by-side)
 
-## 技术要求
+## Technical Requirements
 
-### CDN 白名单
+### CDN Allowlist
 
-Widget 内的外部资源只能从以下 CDN 加载（CSP 强制执行）：
+External resources in widgets can only be loaded from these CDNs (enforced by CSP):
 
 - `cdnjs.cloudflare.com`
 - `cdn.jsdelivr.net`
 - `unpkg.com`
 - `esm.sh`
 
-### 安全约束
+### Security Constraints
 
-- Widget 代码在 sandbox iframe 中执行（无 allow-same-origin / allow-top-navigation）
-- `connect-src 'none'` 禁止 fetch / XHR / WebSocket
-- 链接点击被拦截，由宿主应用处理
+- Widget code runs in a sandboxed iframe (no allow-same-origin / allow-top-navigation)
+- `connect-src 'none'` blocks fetch / XHR / WebSocket
+- Link clicks are intercepted and handled by the host application
 
-## 渠道适配：Widget 截图与投递（M3）
+## Channel Adaptation: Widget Screenshot & Delivery (M3)
 
-**重要：在 Telegram、飞书、QQ 等非 Web 渠道，你必须将 widget 渲染为 PNG 图片再发送。绝对不要把 show-widget 围栏的原始代码直接发给用户——用户看到的会是一堆乱码 HTML。**
+**CRITICAL: On Telegram, Feishu, QQ, and other non-Web channels, you MUST render widgets as PNG images before sending. NEVER send the raw show-widget fence code directly to the user — they will see garbled HTML.**
 
-### 强制规则
+### Mandatory Rules
 
-1. **必须使用 `show-widget` 围栏**（不是 `html`、`svg` 或其他围栏标记）
-2. **每次输出 `show-widget` 围栏后，必须立即执行截图脚本**，不能跳过
-3. **用截图生成的 PNG 图片发送给用户**，不要发送原始代码
-4. Web Playground 和 Aight App 支持直接渲染 widget，是唯一不需要截图的渠道
+1. **You MUST use the `show-widget` fence** (NOT `html`, `svg`, or any other fence marker)
+2. **After every `show-widget` fence output, you MUST immediately run the screenshot script** — do not skip this step
+3. **Send the generated PNG image to the user**, not the raw code
+4. Web Playground and Aight App support direct widget rendering — these are the ONLY channels that do not require screenshots
 
-### 截图流程（每次输出 widget 后必须执行）
+### Screenshot Workflow (MUST execute after every widget output)
 
-> 脚本路径使用 `{baseDir}` 占位符，OpenClaw 会自动替换为本 Skill 的安装目录。
+> Script paths use the `{baseDir}` placeholder, which OpenClaw automatically replaces with this Skill's installation directory.
 
-**Step 1** — 输出 `show-widget` 围栏后，立即调用截图脚本（通过 exec 工具，host 设为 gateway）：
+**Step 1** — Immediately after outputting a `show-widget` fence, call the screenshot script (via exec tool, host set to gateway):
 
 ```
-exec: echo '<模型回复全文>' | node {baseDir}/scripts/widget-screenshot.mjs --title "<widget_title>"
+exec: echo '<full_model_response>' | node {baseDir}/scripts/widget-screenshot.mjs --title "<widget_title>"
 ```
 
-脚本会从回复中提取对应的 show-widget 围栏，渲染为 PNG，输出文件路径。
+The script extracts the matching show-widget fence from the response, renders it as PNG, and outputs the file path.
 
-**Step 2** — 用 send action 发送图片到当前会话：
+**Step 2** — Send the image to the current conversation via send action:
 
 ```
 send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
 ```
 
-**Step 3**（可选）— 如果 widget 包含 drill-down 按钮（`__widgetSendMessage` 调用），提取按钮列表：
+**Step 3** (optional) — If the widget contains drill-down buttons (`__widgetSendMessage` calls), extract the button list:
 
 ```
 exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
 ```
 
-然后在 send action 中附加 buttons 参数，让用户可以点击追问。
+Then attach the buttons parameter in the send action so users can tap to follow up.
 
-### 常见错误（不要犯）
+### Common Mistakes (DO NOT make these)
 
-- ❌ 用 `html` 围栏输出 widget 代码 → 用户看到乱码
-- ❌ 输出 `show-widget` 围栏后不截图 → 用户看到原始 JSON + HTML
-- ❌ 把 widget_code 当文本消息发送 → 用户看到一堆代码
-- ✅ 正确做法：`show-widget` 围栏 → 截图 → 发送 PNG 图片
+- ❌ Using `html` fence to output widget code → user sees garbled text
+- ❌ Outputting `show-widget` fence without screenshotting → user sees raw JSON + HTML
+- ❌ Sending widget_code as a text message → user sees a wall of code
+- ✅ Correct: `show-widget` fence → screenshot → send PNG image
 
-### 环境要求
+### Environment Requirements
 
-- exec 工具需使用 `host: gateway`（或 `node`），以继承宿主环境变量（如 `CHROME_CDP_URL`）
-- 如果 VPS 上使用已有的 Chrome 实例，需设置环境变量：`CHROME_CDP_URL=http://localhost:9222`
-- 如果未设置 `CHROME_CDP_URL`，脚本会自动启动 headless Chromium（需要 Playwright + Chromium 已安装）
+- The exec tool must use `host: gateway` (or `node`) to inherit host environment variables (e.g. `CHROME_CDP_URL`)
+- If using an existing Chrome instance on the VPS, set the environment variable: `CHROME_CDP_URL=http://localhost:9222`
+- If `CHROME_CDP_URL` is not set, the script will attempt to launch headless Chromium (requires Playwright + Chromium installed)
 
-### 脚本参数
+### Script Parameters
 
-| 脚本 | 参数 | 说明 |
-|------|------|------|
-| `widget-screenshot.mjs` | `--title <name>` | 从 stdin 的模型输出中按 title 提取 widget 并截图 |
-| | `--file <path>` | 直接截图一个 HTML 文件 |
-| | `--output <path>` | 指定输出 PNG 路径（默认自动生成临时路径） |
-| | `--theme light\|dark` | 截图主题（默认 light） |
-| | `--width <px>` | 视口宽度（默认 680） |
-| `widget-drilldown.mjs` | `--code <html>` | 从 widget_code 中提取 drill-down 按钮 |
-| | `--file <path>` | 从文件中提取 |
+| Script | Parameter | Description |
+|--------|-----------|-------------|
+| `widget-screenshot.mjs` | `--title <name>` | Extract widget by title from stdin model output and screenshot it |
+| | `--file <path>` | Screenshot a raw HTML file directly |
+| | `--output <path>` | Specify output PNG path (defaults to `./imagine/`) |
+| | `--theme light\|dark` | Screenshot theme (default: light) |
+| | `--width <px>` | Viewport width (default: 680) |
+| `widget-drilldown.mjs` | `--code <html>` | Extract drill-down buttons from widget_code |
+| | `--file <path>` | Extract from a file |
 
-## 相关项目
+## Related Projects
 
-- 渲染运行时（`@generative-ui/renderer`）—— 见 M2 里程碑
-- 原始参考：[CodePilot](https://github.com/op7418/CodePilot) / [pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)
+- Rendering runtime (`@generative-ui/renderer`) — see M2 milestone
+- Original references: [CodePilot](https://github.com/op7418/CodePilot) / [pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)

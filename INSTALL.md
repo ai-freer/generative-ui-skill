@@ -1,55 +1,55 @@
-# Generative UI — 安装指南
+# Generative UI — Installation Guide
 
-本文档供 Agent 读取并执行安装操作。
+This document is intended for the Agent to read and execute installation steps.
 
 ---
 
-## 1. 安装 Skill
+## 1. Install Skill
 
-将本目录注册为 OpenClaw Skill。选择以下任一方式：
+Register this directory as an OpenClaw Skill. Choose one of the following methods:
 
-### 方式 A：symlink（推荐，方便 git pull 迭代）
+### Method A: Symlink (recommended, easy to iterate via git pull)
 
 ```bash
-ln -s <本目录的绝对路径> ~/.openclaw/workspace/skills/generative-ui
+ln -s <absolute_path_to_this_directory> ~/.openclaw/workspace/skills/generative-ui
 ```
 
-### 方式 B：extraDirs 配置
+### Method B: extraDirs config
 
-在 `~/.openclaw/openclaw.json` 中添加本目录的父目录：
+Add the parent directory of this folder to `~/.openclaw/openclaw.json`:
 
 ```jsonc
-{ "skills": { "load": { "extraDirs": ["<本目录的父目录>"] } } }
+{ "skills": { "load": { "extraDirs": ["<parent_directory_of_this_folder>"] } } }
 ```
 
-验证：确认 `SKILL.md` 能被 OpenClaw 加载（skill 列表中出现 `generative-ui`）。
+Verify: confirm `SKILL.md` is loaded by OpenClaw (`generative-ui` appears in the skill list).
 
 ---
 
-## 2. 安装 Playwright 客户端
+## 2. Install Playwright Client
 
-截图脚本依赖 `playwright-core` 作为 Chrome CDP 客户端 SDK（不含浏览器二进制）。
+The screenshot script requires `playwright-core` as a Chrome CDP client SDK (no browser binaries included).
 
 ```bash
-cd <本目录>
+cd <this_directory>
 npm install playwright-core
 ```
 
-> 前置条件：VPS 上已有 Chrome 实例并开启 CDP（`--remote-debugging-port=9222`）。
-> Chrome 的安装和 CDP 端口开放不属于本 Skill 职责。
+> Prerequisite: A Chrome instance must already be running on the VPS with CDP enabled (`--remote-debugging-port=9222`).
+> Installing Chrome and opening the CDP port is NOT the responsibility of this Skill.
 
 ---
 
-## 3. 配置环境变量
+## 3. Configure Environment Variables
 
-截图脚本通过 `CHROME_CDP_URL` 连接已有的 Chrome 实例。
+The screenshot script connects to an existing Chrome instance via `CHROME_CDP_URL`.
 
 ```bash
-# 添加到 ~/.openclaw/.env（推荐）
+# Add to ~/.openclaw/.env (recommended)
 echo 'CHROME_CDP_URL=http://localhost:9222' >> ~/.openclaw/.env
 ```
 
-或在 `~/.openclaw/openclaw.json` 中为本 Skill 配置：
+Or configure per-skill in `~/.openclaw/openclaw.json`:
 
 ```jsonc
 {
@@ -63,50 +63,50 @@ echo 'CHROME_CDP_URL=http://localhost:9222' >> ~/.openclaw/.env
 }
 ```
 
-验证：
+Verify:
 
 ```bash
 curl -s http://localhost:9222/json/version
-# 应返回 Chrome 版本信息
+# Should return Chrome version info
 ```
 
 ---
 
-## 4. 安装 Plugin Hook（可选，推荐）
+## 4. Install Plugin Hook (optional, recommended)
 
-`extensions/widget-fence-cleaner/` 是一个 `message_sending` Plugin Hook，在消息发送前将 `show-widget` 围栏替换为 `[📊 title]` 占位符，防止用户看到原始 HTML 代码。
+`extensions/widget-fence-cleaner/` is a `message_sending` Plugin Hook that replaces `show-widget` fences with `[📊 title]` placeholders before delivery, preventing users from seeing raw HTML code.
 
 ```bash
-# 将 plugin 目录复制或 symlink 到 OpenClaw extensions 目录
-cp -r <本目录>/extensions/widget-fence-cleaner ~/.openclaw/extensions/widget-fence-cleaner
+# Copy or symlink the plugin directory to OpenClaw extensions
+cp -r <this_directory>/extensions/widget-fence-cleaner ~/.openclaw/extensions/widget-fence-cleaner
 
-# 或 symlink
-ln -s <本目录>/extensions/widget-fence-cleaner ~/.openclaw/extensions/widget-fence-cleaner
+# Or symlink
+ln -s <this_directory>/extensions/widget-fence-cleaner ~/.openclaw/extensions/widget-fence-cleaner
 ```
 
-验证：重启 OpenClaw 后，plugin 列表中出现 `widget-fence-cleaner`。
+Verify: after restarting OpenClaw, `widget-fence-cleaner` appears in the plugin list.
 
 ---
 
-## 5. 验证安装
+## 5. Verify Installation
 
 ```bash
 export CHROME_CDP_URL=http://localhost:9222
-cd <本目录>
+cd <this_directory>
 
-# 验证截图管线
+# Verify screenshot pipeline
 node scripts/widget-screenshot.mjs --file examples/jwt-flow.html --output ./imagine/test.png
-ls -la ./imagine/test.png  # 应有文件，大小 > 0
+ls -la ./imagine/test.png  # Should exist, size > 0
 
-# 验证围栏解析
+# Verify fence parsing
 echo '```show-widget
 {"title":"test","widget_code":"<div>hello</div>"}
 ```' | node scripts/widget-interceptor.mjs
-# 预期：{ hasWidget: true, widgets: [...] }
+# Expected: { hasWidget: true, widgets: [...] }
 
-# 验证 drill-down 提取
-echo '<rect onclick="window.__widgetSendMessage('"'"'详细介绍'"'"')" />' | node scripts/widget-drilldown.mjs
-# 预期：{ count: 1, drillDowns: [...] }
+# Verify drill-down extraction
+echo '<rect onclick="window.__widgetSendMessage('"'"'hello'"'"')" />' | node scripts/widget-drilldown.mjs
+# Expected: { count: 1, drillDowns: [...] }
 ```
 
-全部通过后，在 Telegram/飞书中向 bot 发送可视化请求（如"解释 JWT 认证流程"），确认收到文字 + PNG 图片。
+Once all checks pass, send a visualization request to the bot via Telegram/Feishu (e.g. "explain JWT auth flow") and confirm you receive text + PNG image.
