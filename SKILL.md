@@ -31,7 +31,7 @@ exec: echo '<your_full_response_text>' | node {baseDir}/scripts/widget-screensho
 
 Output: file path to the generated PNG.
 
-**Step 2** — Send the image:
+**Step 2** — Send the image (without buttons first, or combined with Step 3):
 
 ```
 send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
@@ -43,7 +43,13 @@ send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
 exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
 ```
 
-Attach the extracted buttons in the send action so users can tap to explore further. This is how widget interactivity works on IM channels — drill-down clicks become native buttons.
+The script outputs a JSON with `telegram` field containing the button array. Use the `buttons` parameter directly in the send action:
+
+```
+send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>", buttons: [[{"text": "Explain etcd", "callback_data": "drill:Explain etcd"}], [{"text": "How kube-proxy works", "callback_data": "drill:How kube-proxy works"}]] }
+```
+
+**IMPORTANT**: `buttons` is a top-level parameter — a 2D array where each inner array is a row containing `{text, callback_data}` objects. Do NOT nest it inside `fields` or `inline_keyboard`.
 
 ### Widget Interactivity on IM Channels
 
