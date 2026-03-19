@@ -364,7 +364,6 @@ var COLOR_RAMPS = `
 .c-red > rect,.c-red > circle,.c-red > ellipse { fill:#FCEBEB; stroke:#A32D2D; stroke-width:0.5px; }
 .c-red .t,.c-red .th { fill:#791F1F; } .c-red .ts { fill:#A32D2D; }`;
 var COLOR_RAMPS_DARK = `
-@media (prefers-color-scheme: dark) {
 .c-purple > rect,.c-purple > circle,.c-purple > ellipse { fill:#3C3489; stroke:#AFA9EC; stroke-width:0.5px; }
 .c-purple .t,.c-purple .th { fill:#CECBF6; } .c-purple .ts { fill:#AFA9EC; }
 
@@ -391,7 +390,7 @@ var COLOR_RAMPS_DARK = `
 
 .c-red > rect,.c-red > circle,.c-red > ellipse { fill:#791F1F; stroke:#F09595; stroke-width:0.5px; }
 .c-red .t,.c-red .th { fill:#F7C1C1; } .c-red .ts { fill:#F09595; }
-}`;
+`;
 function buildRootVars(mapping, isDark = false) {
   const entries = Object.entries(mapping).map(([k, v]) => `  ${k}: ${v};`).join("\n");
   return `:root {
@@ -399,13 +398,36 @@ ${entries}
 ${buildShortAliases(isDark)}
 }`;
 }
-function generateIframeStyles(mapping) {
-  const vars = buildRootVars(mapping ?? DEFAULT_CSS_VAR_MAPPING);
+function resolveTheme(theme = "auto") {
+  if (theme === "light" || theme === "dark") return theme;
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    try {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    } catch (_) {
+    }
+  }
+  return "light";
+}
+function getThemeSurface(theme, mapping) {
+  const vars = theme === "dark" ? DARK_CSS_VAR_MAPPING : mapping ?? DEFAULT_CSS_VAR_MAPPING;
+  return {
+    background: vars["--color-background-primary"] ?? (theme === "dark" ? "#1e293b" : "#fff"),
+    text: vars["--color-text-primary"] ?? (theme === "dark" ? "#f1f5f9" : "#0f172a")
+  };
+}
+function generateIframeStyles(mapping, theme = "auto") {
+  const vars = buildRootVars(
+    theme === "dark" ? DARK_CSS_VAR_MAPPING : mapping ?? DEFAULT_CSS_VAR_MAPPING,
+    theme === "dark"
+  );
   const darkVars = buildRootVars(DARK_CSS_VAR_MAPPING, true);
   const body = `body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color-text-primary); background:var(--color-background-primary); }`;
-  const darkOverride = `@media (prefers-color-scheme: dark) {
+  const darkOverride = theme === "auto" ? `@media (prefers-color-scheme: dark) {
 ${darkVars}
-body { background:var(--color-background-primary); }
+body { color:var(--color-text-primary); background:var(--color-background-primary); }
+}` : "";
+  const darkRamps = theme === "light" ? "" : theme === "dark" ? COLOR_RAMPS_DARK : `@media (prefers-color-scheme: dark) {
+${COLOR_RAMPS_DARK}
 }`;
   return `${vars}
 ${body}
@@ -414,15 +436,35 @@ ${FORM_ELEMENT_STYLES}
 ${SVG_TEXT_CLASSES}
 ${SVG_STRUCTURAL_CLASSES}
 ${COLOR_RAMPS}
-${COLOR_RAMPS_DARK}`;
+${darkRamps}`;
 }
 function generateStreamingStyles(scopeClass = ".widget-streaming") {
   const scope = (css) => css.replace(/^(\.[a-z])/gm, `${scopeClass} $1`);
-  return `${scopeClass} { min-height: 120px; transition: min-height 0.3s ease; }
+  const lightVars = Object.entries(DEFAULT_CSS_VAR_MAPPING).map(([k, v]) => `  ${k}: ${v};`).join("\n");
+  const darkVars = Object.entries(DARK_CSS_VAR_MAPPING).map(([k, v]) => `  ${k}: ${v};`).join("\n");
+  return `${scopeClass} {
+  min-height: 120px;
+  transition: min-height 0.3s ease;
+  ${lightVars}
+  ${buildShortAliases(false)}
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+}
+@media (prefers-color-scheme: dark) {
+  ${scopeClass} {
+  ${darkVars}
+  ${buildShortAliases(true)}
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+  }
+}
 ${scopeClass} svg { max-width: 100%; height: auto; }
 ${scope(SVG_TEXT_CLASSES)}
 ${scope(SVG_STRUCTURAL_CLASSES)}
-${scope(COLOR_RAMPS)}`;
+${scope(COLOR_RAMPS)}
+@media (prefers-color-scheme: dark) {
+${scope(COLOR_RAMPS_DARK)}
+}`;
 }
 function buildCSP(cdnWhitelist) {
   const origins = (cdnWhitelist ?? CDN_WHITELIST).join(" ");
@@ -448,18 +490,27 @@ function fixContrast(){document.querySelectorAll("svg rect, svg circle, svg elli
 function parseLum(c){if(!c)return null;c=c.trim();var m=c.match(/^#([0-9a-f]{3,8})$/i);if(!m)return null;var h=m[1];if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];if(h.length<6)return null;var r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return 0.299*r+0.587*g+0.114*b;}
 `.trim();
 function buildWidgetDoc(widgetCode, options) {
-  const styles = generateIframeStyles(options?.cssVarMapping);
+  const requestedTheme = options?.theme ?? "auto";
+  const initialTheme = resolveTheme(requestedTheme);
+  const styles = generateIframeStyles(options?.cssVarMapping, requestedTheme);
   const csp = buildCSP(options?.cdnWhitelist);
   const maxH = options?.maxHeight ?? 800;
-  return '<!DOCTYPE html><html style="color-scheme:light dark"><head><meta charset="UTF-8"/><meta http-equiv="Content-Security-Policy" content="' + csp.replace(/"/g, "&quot;") + '"/><style>' + styles + "</style></head><body>" + widgetCode + "<script>" + IFRAME_SCRIPT + "\nvar __maxH=" + maxH + ";</script></body></html>";
+  const surface = getThemeSurface(initialTheme, options?.cssVarMapping);
+  const colorScheme = requestedTheme === "auto" ? "light dark" : requestedTheme;
+  return '<!DOCTYPE html><html style="color-scheme:' + colorScheme + ";background:" + surface.background + ';"><head><meta charset="UTF-8"/><meta http-equiv="Content-Security-Policy" content="' + csp.replace(/"/g, "&quot;") + '"/><style>' + styles + '</style></head><body style="background:' + surface.background + ";color:" + surface.text + ';">' + widgetCode + "<script>" + IFRAME_SCRIPT + "\nvar __maxH=" + maxH + ";</script></body></html>";
 }
 function createWidgetIframe(container, widgetCode, options) {
+  const requestedTheme = options?.theme ?? "auto";
+  const initialTheme = resolveTheme(requestedTheme);
+  const surface = getThemeSurface(initialTheme, options?.cssVarMapping);
   const iframe = document.createElement("iframe");
   iframe.setAttribute("sandbox", "allow-scripts");
   iframe.title = options?.title ?? "widget";
   iframe.srcdoc = buildWidgetDoc(widgetCode, options);
   iframe.style.width = "100%";
   iframe.style.border = "none";
+  iframe.style.backgroundColor = surface.background;
+  iframe.style.colorScheme = requestedTheme === "auto" ? "light dark" : requestedTheme;
   container.appendChild(iframe);
   return iframe;
 }
@@ -653,19 +704,15 @@ var WidgetRenderer = class {
   createIframe(w) {
     const wrap = document.createElement("div");
     wrap.className = "gu-widget-wrap";
-    const iframe = document.createElement("iframe");
-    iframe.setAttribute("sandbox", "allow-scripts");
-    iframe.title = w.title;
     const sanitized = sanitizeForIframe(w.widget_code);
-    iframe.srcdoc = buildWidgetDoc(sanitized, {
+    const iframe = createWidgetIframe(wrap, sanitized, {
+      title: w.title,
       cssVarMapping: this.cssVarMapping,
       cdnWhitelist: this.cdnWhitelist,
-      maxHeight: this.maxHeight
+      maxHeight: this.maxHeight,
+      theme: this.theme
     });
-    iframe.style.width = "100%";
-    iframe.style.border = "none";
     iframe.style.minHeight = "300px";
-    wrap.appendChild(iframe);
     this.container.appendChild(wrap);
   }
   showPlaceholder() {

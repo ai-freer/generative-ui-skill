@@ -18,10 +18,12 @@ interface ParsedFence {
 type StreamParserState = 'TEXT' | 'FENCE_OPEN' | 'WIDGET_CODE' | 'FENCE_CLOSE';
 /** CSS variable mapping: model standard name → host actual value */
 type CssVarMapping = Record<string, string>;
+/** Widget theme mode */
+type WidgetTheme = 'auto' | 'light' | 'dark';
 /** Options for creating a WidgetRenderer */
 interface RendererOptions {
     container: HTMLElement;
-    theme?: 'auto' | 'light' | 'dark';
+    theme?: WidgetTheme;
     cdnWhitelist?: string[];
     cssVarMapping?: CssVarMapping;
     onSendMessage?: (text: string) => void;
@@ -34,6 +36,7 @@ interface IframeDocOptions {
     cssVarMapping?: CssVarMapping;
     cdnWhitelist?: string[];
     maxHeight?: number;
+    theme?: WidgetTheme;
 }
 interface WidgetResizeMessage {
     type: 'widgetResize';
@@ -120,7 +123,7 @@ declare const DEFAULT_CSS_VAR_MAPPING: CssVarMapping;
  * Generate the full CSS string to inject inside an iframe.
  * Includes :root variables, body reset, SVG classes, and color ramps.
  */
-declare function generateIframeStyles(mapping?: CssVarMapping): string;
+declare function generateIframeStyles(mapping?: CssVarMapping, theme?: WidgetTheme): string;
 /**
  * Generate scoped CSS for streaming preview in the host page.
  * All selectors are prefixed with the scope class (default: `.widget-streaming`).
@@ -233,4 +236,4 @@ declare class WidgetRenderer {
     private setupMessageListener;
 }
 
-export { CDN_WHITELIST, type CssVarMapping, DEFAULT_CSS_VAR_MAPPING, type IframeDocOptions, type ParsedFence, type RendererOptions, StreamParser, type StreamParserState, StreamingPreview, type WidgetFence, type WidgetMessage, type WidgetReadyMessage, WidgetRenderer, type WidgetResizeMessage, type WidgetSendMessage, type WidgetThemeMessage, buildWidgetDoc, createWidgetIframe, extractPartialWidgetCode, findAllShowWidgetFences, generateIframeStyles, generateStreamingStyles, isShowWidgetFence, parseShowWidgetFence, patchIncompleteWidgetFence, sanitizeForIframe, sanitizeForStreaming, stripUnclosedScript };
+export { CDN_WHITELIST, type CssVarMapping, DEFAULT_CSS_VAR_MAPPING, type IframeDocOptions, type ParsedFence, type RendererOptions, StreamParser, type StreamParserState, StreamingPreview, type WidgetFence, type WidgetMessage, type WidgetReadyMessage, WidgetRenderer, type WidgetResizeMessage, type WidgetSendMessage, type WidgetTheme, type WidgetThemeMessage, buildWidgetDoc, createWidgetIframe, extractPartialWidgetCode, findAllShowWidgetFences, generateIframeStyles, generateStreamingStyles, isShowWidgetFence, parseShowWidgetFence, patchIncompleteWidgetFence, sanitizeForIframe, sanitizeForStreaming, stripUnclosedScript };

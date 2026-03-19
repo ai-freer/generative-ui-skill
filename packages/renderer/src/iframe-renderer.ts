@@ -1,5 +1,11 @@
 import type { IframeDocOptions } from './types.js';
-import { generateIframeStyles, buildCSP, CDN_WHITELIST } from './css-bridge.js';
+import {
+  generateIframeStyles,
+  buildCSP,
+  CDN_WHITELIST,
+  getThemeSurface,
+  resolveTheme,
+} from './css-bridge.js';
 
 /**
  * Script injected into every widget iframe.
@@ -28,16 +34,20 @@ function parseLum(c){if(!c)return null;c=c.trim();var m=c.match(/^#([0-9a-f]{3,8
  * Includes CSP, CSS variables, SVG classes, widget code, and communication scripts.
  */
 export function buildWidgetDoc(widgetCode: string, options?: IframeDocOptions): string {
-  const styles = generateIframeStyles(options?.cssVarMapping);
+  const requestedTheme = options?.theme ?? 'auto';
+  const initialTheme = resolveTheme(requestedTheme);
+  const styles = generateIframeStyles(options?.cssVarMapping, requestedTheme);
   const csp = buildCSP(options?.cdnWhitelist);
   const maxH = options?.maxHeight ?? 800;
+  const surface = getThemeSurface(initialTheme, options?.cssVarMapping);
+  const colorScheme = requestedTheme === 'auto' ? 'light dark' : requestedTheme;
 
   return (
-    '<!DOCTYPE html><html style="color-scheme:light dark"><head><meta charset="UTF-8"/>' +
+    '<!DOCTYPE html><html style="color-scheme:' + colorScheme + ';background:' + surface.background + ';"><head><meta charset="UTF-8"/>' +
     '<meta http-equiv="Content-Security-Policy" content="' +
     csp.replace(/"/g, '&quot;') +
     '"/>' +
-    '<style>' + styles + '</style></head><body>' +
+    '<style>' + styles + '</style></head><body style="background:' + surface.background + ';color:' + surface.text + ';">' +
     widgetCode +
     '<script>' + IFRAME_SCRIPT +
     '\nvar __maxH=' + maxH + ';' +
@@ -54,12 +64,17 @@ export function createWidgetIframe(
   widgetCode: string,
   options?: IframeDocOptions & { title?: string },
 ): HTMLIFrameElement {
+  const requestedTheme = options?.theme ?? 'auto';
+  const initialTheme = resolveTheme(requestedTheme);
+  const surface = getThemeSurface(initialTheme, options?.cssVarMapping);
   const iframe = document.createElement('iframe');
   iframe.setAttribute('sandbox', 'allow-scripts');
   iframe.title = options?.title ?? 'widget';
   iframe.srcdoc = buildWidgetDoc(widgetCode, options);
   iframe.style.width = '100%';
   iframe.style.border = 'none';
+  iframe.style.backgroundColor = surface.background;
+  iframe.style.colorScheme = requestedTheme === 'auto' ? 'light dark' : requestedTheme;
   container.appendChild(iframe);
   return iframe;
 }

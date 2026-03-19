@@ -149,4 +149,12 @@ describe('WidgetRenderer', () => {
     expect(iframe?.srcdoc).not.toContain('<iframe');
     expect(iframe?.srcdoc).toContain('safe');
   });
+
+  it('passes the renderer theme through to iframe rendering', () => {
+    renderer = new WidgetRenderer({ container, theme: 'dark' });
+    renderer.feed('```show-widget\n{"title":"x","widget_code":"<div>dark</div>"}\n```');
+    const iframe = container.querySelector('iframe');
+    expect(iframe?.srcdoc).toContain('color-scheme:dark');
+    expect(iframe?.srcdoc).toContain('background:#1e293b');
+  });
 });

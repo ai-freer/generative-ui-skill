@@ -23,10 +23,13 @@ export type StreamParserState = 'TEXT' | 'FENCE_OPEN' | 'WIDGET_CODE' | 'FENCE_C
 /** CSS variable mapping: model standard name → host actual value */
 export type CssVarMapping = Record<string, string>;
 
+/** Widget theme mode */
+export type WidgetTheme = 'auto' | 'light' | 'dark';
+
 /** Options for creating a WidgetRenderer */
 export interface RendererOptions {
   container: HTMLElement;
-  theme?: 'auto' | 'light' | 'dark';
+  theme?: WidgetTheme;
   cdnWhitelist?: string[];
   cssVarMapping?: CssVarMapping;
   onSendMessage?: (text: string) => void;
@@ -40,6 +43,7 @@ export interface IframeDocOptions {
   cssVarMapping?: CssVarMapping;
   cdnWhitelist?: string[];
   maxHeight?: number;
+  theme?: WidgetTheme;
 }
 
 // --- PostMessage protocol ---

@@ -113,6 +113,14 @@ describe('generateIframeStyles', () => {
     // Check dark ramp stroke (purple 200)
     expect(css).toContain('stroke:#AFA9EC');
   });
+
+  it('can force dark theme without waiting for media-query evaluation', () => {
+    const css = generateIframeStyles(undefined, 'dark');
+    expect(css).toContain('--color-background-primary: #1e293b');
+    expect(css).toContain('--color-text-primary: #f1f5f9');
+    expect(css).not.toContain('prefers-color-scheme: dark');
+    expect(css).toContain('fill:#3C3489');
+  });
 });
 
 describe('generateStreamingStyles', () => {

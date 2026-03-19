@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, it, expect } from 'vitest';
 import { buildWidgetDoc } from '../src/iframe-renderer.js';
 
@@ -86,5 +88,35 @@ describe('buildWidgetDoc', () => {
     expect(doc).toContain('tryBoot3DScene');
     expect(doc).toContain('schedule3DBoot');
     expect(doc).toContain('if(typeof init!=="function")return false;');
+  });
+
+  it('forces dark theme styles into the first paint when requested', () => {
+    const doc = buildWidgetDoc('<p>test</p>', { theme: 'dark' });
+    expect(doc).toContain('color-scheme:dark');
+    expect(doc).toContain('background:#1e293b');
+    expect(doc).toContain('color:#f1f5f9');
+  });
+
+  it('uses the current system dark preference for auto mode first paint', () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(prefers-color-scheme: dark)',
+      media: query,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent() { return false; },
+    })) as typeof window.matchMedia;
+
+    try {
+      const doc = buildWidgetDoc('<p>test</p>');
+      expect(doc).toContain('background:#1e293b');
+      expect(doc).toContain('color:#f1f5f9');
+      expect(doc).toContain('color-scheme:light dark');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 });

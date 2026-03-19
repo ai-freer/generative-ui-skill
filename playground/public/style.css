@@ -688,17 +688,7 @@ body {
 /* Streaming preview — renders partial SVG in-page before iframe is created */
 /* SVG class + color ramp styles are injected dynamically by @generative-ui/renderer */
 .widget-streaming {
-  --color-background-primary: #fff;
-  --color-background-secondary: #f1f5f9;
-  --color-background-tertiary: #e2e8f0;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #64748b;
-  --color-text-tertiary: #94a3b8;
-  --color-border-tertiary: rgba(0,0,0,.12);
-  --color-border-secondary: rgba(0,0,0,.2);
-  --font-sans: system-ui, -apple-system, sans-serif;
   padding: 1rem;
-  background: #fff;
 }
 
 .widget-streaming svg {

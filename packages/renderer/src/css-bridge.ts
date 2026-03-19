@@ -1,4 +1,4 @@
-import type { CssVarMapping } from './types.js';
+import type { CssVarMapping, WidgetTheme } from './types.js';
 
 /** Default CDN whitelist (CSP-enforced) */
 export const CDN_WHITELIST = [
@@ -105,7 +105,6 @@ const COLOR_RAMPS = `
 
 // --- Dark color ramps: 800 fill + 200 stroke + 100 title / 200 subtitle ---
 const COLOR_RAMPS_DARK = `
-@media (prefers-color-scheme: dark) {
 .c-purple > rect,.c-purple > circle,.c-purple > ellipse { fill:#3C3489; stroke:#AFA9EC; stroke-width:0.5px; }
 .c-purple .t,.c-purple .th { fill:#CECBF6; } .c-purple .ts { fill:#AFA9EC; }
 
@@ -132,7 +131,7 @@ const COLOR_RAMPS_DARK = `
 
 .c-red > rect,.c-red > circle,.c-red > ellipse { fill:#791F1F; stroke:#F09595; stroke-width:0.5px; }
 .c-red .t,.c-red .th { fill:#F7C1C1; } .c-red .ts { fill:#F09595; }
-}`;
+`;
 
 const ALL_COLOR_NAMES = ['purple', 'teal', 'coral', 'pink', 'gray', 'blue', 'green', 'amber', 'red'] as const;
 export type ColorName = typeof ALL_COLOR_NAMES[number];
@@ -145,16 +144,53 @@ function buildRootVars(mapping: CssVarMapping, isDark = false): string {
   return `:root {\n${entries}\n${buildShortAliases(isDark)}\n}`;
 }
 
+export function resolveTheme(theme: WidgetTheme = 'auto'): 'light' | 'dark' {
+  if (theme === 'light' || theme === 'dark') return theme;
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    try {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch (_) {
+      // Fall back to light when matchMedia is unavailable or throws.
+    }
+  }
+  return 'light';
+}
+
+export function getThemeSurface(
+  theme: 'light' | 'dark',
+  mapping?: CssVarMapping,
+): { background: string; text: string } {
+  const vars = theme === 'dark' ? DARK_CSS_VAR_MAPPING : (mapping ?? DEFAULT_CSS_VAR_MAPPING);
+  return {
+    background: vars['--color-background-primary'] ?? (theme === 'dark' ? '#1e293b' : '#fff'),
+    text: vars['--color-text-primary'] ?? (theme === 'dark' ? '#f1f5f9' : '#0f172a'),
+  };
+}
+
 /**
  * Generate the full CSS string to inject inside an iframe.
  * Includes :root variables, body reset, SVG classes, and color ramps.
  */
-export function generateIframeStyles(mapping?: CssVarMapping): string {
-  const vars = buildRootVars(mapping ?? DEFAULT_CSS_VAR_MAPPING);
+export function generateIframeStyles(
+  mapping?: CssVarMapping,
+  theme: WidgetTheme = 'auto',
+): string {
+  const vars = buildRootVars(
+    theme === 'dark' ? DARK_CSS_VAR_MAPPING : (mapping ?? DEFAULT_CSS_VAR_MAPPING),
+    theme === 'dark',
+  );
   const darkVars = buildRootVars(DARK_CSS_VAR_MAPPING, true);
   const body = `body { margin:0; padding:1rem; font:16px/1.6 var(--font-sans); color:var(--color-text-primary); background:var(--color-background-primary); }`;
-  const darkOverride = `@media (prefers-color-scheme: dark) {\n${darkVars}\nbody { background:var(--color-background-primary); }\n}`;
-  return `${vars}\n${body}\n${darkOverride}\n${FORM_ELEMENT_STYLES}\n${SVG_TEXT_CLASSES}\n${SVG_STRUCTURAL_CLASSES}\n${COLOR_RAMPS}\n${COLOR_RAMPS_DARK}`;
+  const darkOverride = theme === 'auto'
+    ? `@media (prefers-color-scheme: dark) {\n${darkVars}\nbody { color:var(--color-text-primary); background:var(--color-background-primary); }\n}`
+    : '';
+  const darkRamps = theme === 'light'
+    ? ''
+    : theme === 'dark'
+      ? COLOR_RAMPS_DARK
+      : `@media (prefers-color-scheme: dark) {\n${COLOR_RAMPS_DARK}\n}`;
+
+  return `${vars}\n${body}\n${darkOverride}\n${FORM_ELEMENT_STYLES}\n${SVG_TEXT_CLASSES}\n${SVG_STRUCTURAL_CLASSES}\n${COLOR_RAMPS}\n${darkRamps}`;
 }
 
 /**
@@ -165,11 +201,36 @@ export function generateStreamingStyles(scopeClass = '.widget-streaming'): strin
   const scope = (css: string) =>
     css.replace(/^(\.[a-z])/gm, `${scopeClass} $1`);
 
-  return `${scopeClass} { min-height: 120px; transition: min-height 0.3s ease; }
+  const lightVars = Object.entries(DEFAULT_CSS_VAR_MAPPING)
+    .map(([k, v]) => `  ${k}: ${v};`)
+    .join('\n');
+  const darkVars = Object.entries(DARK_CSS_VAR_MAPPING)
+    .map(([k, v]) => `  ${k}: ${v};`)
+    .join('\n');
+
+  return `${scopeClass} {
+  min-height: 120px;
+  transition: min-height 0.3s ease;
+  ${lightVars}
+  ${buildShortAliases(false)}
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+}
+@media (prefers-color-scheme: dark) {
+  ${scopeClass} {
+  ${darkVars}
+  ${buildShortAliases(true)}
+  color: var(--color-text-primary);
+  background: var(--color-background-primary);
+  }
+}
 ${scopeClass} svg { max-width: 100%; height: auto; }
 ${scope(SVG_TEXT_CLASSES)}
 ${scope(SVG_STRUCTURAL_CLASSES)}
-${scope(COLOR_RAMPS)}`;
+${scope(COLOR_RAMPS)}
+@media (prefers-color-scheme: dark) {
+${scope(COLOR_RAMPS_DARK)}
+}`;
 }
 
 /**

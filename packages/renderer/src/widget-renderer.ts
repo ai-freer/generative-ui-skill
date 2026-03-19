@@ -1,6 +1,6 @@
 import type { RendererOptions, CssVarMapping, WidgetFence } from './types.js';
 import { StreamParser } from './stream-parser.js';
-import { buildWidgetDoc } from './iframe-renderer.js';
+import { createWidgetIframe } from './iframe-renderer.js';
 import { StreamingPreview, stripUnclosedScript } from './streaming-preview.js';
 import { sanitizeForStreaming, sanitizeForIframe } from './sanitizer.js';
 import { generateStreamingStyles, CDN_WHITELIST } from './css-bridge.js';
@@ -182,19 +182,15 @@ export class WidgetRenderer {
   private createIframe(w: WidgetFence): void {
     const wrap = document.createElement('div');
     wrap.className = 'gu-widget-wrap';
-    const iframe = document.createElement('iframe');
-    iframe.setAttribute('sandbox', 'allow-scripts');
-    iframe.title = w.title;
     const sanitized = sanitizeForIframe(w.widget_code);
-    iframe.srcdoc = buildWidgetDoc(sanitized, {
+    const iframe = createWidgetIframe(wrap, sanitized, {
+      title: w.title,
       cssVarMapping: this.cssVarMapping,
       cdnWhitelist: this.cdnWhitelist,
       maxHeight: this.maxHeight,
+      theme: this.theme,
     });
-    iframe.style.width = '100%';
-    iframe.style.border = 'none';
     iframe.style.minHeight = '300px';
-    wrap.appendChild(iframe);
     this.container.appendChild(wrap);
   }
 
