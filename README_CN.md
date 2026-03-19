@@ -199,9 +199,9 @@ npm start
 | Kimi K2.5 | ✅ 已实测 | 串行补测后视觉质量表现较强 |
 | Seed 2.0 Pro | ✅ 已实测（有保留） | 图表和 mockup 表现较好，但在“无 widget 场景”约束上仍偏弱 |
 | GLM-5 | ✅ 已实测 | 串行补测后稳定性明显改善 |
-| gemini-3.1-pro-preview | 待补测 | 计划作为下一轮补充验证模型 |
+| gemini-3.1-pro-preview | ✅ 已实测（有保留） | 已完成 13 条主验证用例与 3D 补测；当前剩余已知问题仍是“无 widget 场景”里的天气问答误输出 widget |
 
-详细验证记录见 [`tests/prompt-validation.md`](./tests/prompt-validation.md)。上表反映的是当前仓库里已经完成实测的模型，以及已经排入下一轮补测计划的模型。
+详细验证记录见 [`tests/prompt-validation.md`](./tests/prompt-validation.md)。当前仓库工作流已覆盖 Gemini 的 13 条主验证用例，以及全部已测模型的 3D 补测（`用例 14 / 15A / 15B`）。
 
 ### 多模型适应策略
 

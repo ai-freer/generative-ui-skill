@@ -1,0 +1,553 @@
+{
+  "generatedAt": "2026-03-19T06:05:06.282Z",
+  "outDir": "/Users/danielpan/AI_Workspace/projects/generative-ui/tests/manual-validation/2026-03-19-gemini-3d-batch",
+  "total": 34,
+  "passed": 33,
+  "failed": 1,
+  "results": [
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "解释 JWT 认证流程",
+      "caseId": "01",
+      "caseName": "流程图生成",
+      "startedAt": "2026-03-18T19:59:53.681Z",
+      "elapsedMs": 98162,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "展示过去 6 个月的 OpenAI 用户增长趋势",
+      "caseId": "02",
+      "caseName": "数据图表",
+      "startedAt": "2026-03-18T20:01:31.849Z",
+      "elapsedMs": 40792,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "做一个 BMI 计算器",
+      "caseId": "03",
+      "caseName": "交互组件",
+      "startedAt": "2026-03-18T20:03:38.290Z",
+      "elapsedMs": 66547,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "比较 REST 和 GraphQL",
+      "caseId": "04",
+      "caseName": "对比图",
+      "startedAt": "2026-03-18T20:04:44.840Z",
+      "elapsedMs": 65172,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "今天天气怎么样",
+      "caseId": "05",
+      "caseName": "无 widget 场景",
+      "startedAt": "2026-03-18T20:08:00.580Z",
+      "elapsedMs": 47414,
+      "ok": false,
+      "check": {
+        "pass": false,
+        "summary": "误输出 widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "画一下 Kubernetes 的架构",
+      "caseId": "06",
+      "caseName": "结构图",
+      "startedAt": "2026-03-18T20:08:47.998Z",
+      "elapsedMs": 123069,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "解释 JWT 认证流程",
+      "caseId": "07",
+      "caseName": "深色模式兼容",
+      "startedAt": "2026-03-18T20:10:51.068Z",
+      "elapsedMs": 72453,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "做一个 D3.js 的数据可视化",
+      "caseId": "08",
+      "caseName": "CDN 合规",
+      "startedAt": "2026-03-18T20:12:03.523Z",
+      "elapsedMs": 57829,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "设计一个电商 App 的商品详情页，包含主要功能模块",
+      "caseId": "09",
+      "caseName": "产品功能设计",
+      "startedAt": "2026-03-18T20:13:01.353Z",
+      "elapsedMs": 77134,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "用可视化的方式演示冒泡排序的过程，最好能一步步操作",
+      "caseId": "10",
+      "caseName": "算法可视化",
+      "startedAt": "2026-03-18T20:14:18.491Z",
+      "elapsedMs": 103206,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "帮我设计一个赛博朋克风格的虚拟咖啡品牌，包括品牌名、视觉风格和菜单概念",
+      "caseId": "11",
+      "caseName": "品牌世界观设定",
+      "startedAt": "2026-03-18T20:16:01.700Z",
+      "elapsedMs": 66419,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "分析一个 SaaS 产品从获客到留存的完整用户生命周期，给出优化建议",
+      "caseId": "12",
+      "caseName": "复杂策略流程优化",
+      "startedAt": "2026-03-18T20:17:08.121Z",
+      "elapsedMs": 113088,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "给我一些日式侘寂风格的室内设计灵感，用视觉方式呈现",
+      "caseId": "13",
+      "caseName": "纯视觉灵感",
+      "startedAt": "2026-03-18T20:19:01.212Z",
+      "elapsedMs": 93338,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "用 3D 模型展示太阳系的运行原理",
+      "caseId": "14",
+      "caseName": "3D 空间场景",
+      "startedAt": "2026-03-18T20:20:34.551Z",
+      "elapsedMs": 104066,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "用 3D 展示 DNA 双螺旋结构",
+      "caseId": "15A",
+      "caseName": "3D DNA 双螺旋",
+      "startedAt": "2026-03-18T20:22:18.619Z",
+      "elapsedMs": 82975,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "google",
+      "model": "gemini-3.1-pro-preview",
+      "prompt": "解释 DNA 复制的过程",
+      "caseId": "15B",
+      "caseName": "DNA 复制过程",
+      "startedAt": "2026-03-18T20:23:41.595Z",
+      "elapsedMs": 80782,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 widget 且未触发 3D"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "claude-opus-4-6",
+      "prompt": "用 3D 模型展示太阳系的运行原理",
+      "caseId": "14",
+      "caseName": "3D 空间场景",
+      "startedAt": "2026-03-18T20:25:02.379Z",
+      "elapsedMs": 35224,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "claude-opus-4-6",
+      "prompt": "用 3D 展示 DNA 双螺旋结构",
+      "caseId": "15A",
+      "caseName": "3D DNA 双螺旋",
+      "startedAt": "2026-03-18T20:25:37.605Z",
+      "elapsedMs": 29439,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "claude-opus-4-6",
+      "prompt": "解释 DNA 复制的过程",
+      "caseId": "15B",
+      "caseName": "DNA 复制过程",
+      "startedAt": "2026-03-18T20:26:07.046Z",
+      "elapsedMs": 29837,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 widget 且未触发 3D"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "用 3D 模型展示太阳系的运行原理",
+      "caseId": "14",
+      "caseName": "3D 空间场景",
+      "startedAt": "2026-03-18T20:26:36.884Z",
+      "elapsedMs": 32290,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "用 3D 展示 DNA 双螺旋结构",
+      "caseId": "15A",
+      "caseName": "3D DNA 双螺旋",
+      "startedAt": "2026-03-18T20:27:09.175Z",
+      "elapsedMs": 36416,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "解释 DNA 复制的过程",
+      "caseId": "15B",
+      "caseName": "DNA 复制过程",
+      "startedAt": "2026-03-19T04:55:33.749Z",
+      "elapsedMs": 84956,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 widget 且未触发 3D"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "gpt-5.4",
+      "prompt": "用 3D 模型展示太阳系的运行原理",
+      "caseId": "14",
+      "caseName": "3D 空间场景",
+      "startedAt": "2026-03-19T04:56:58.708Z",
+      "elapsedMs": 43932,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "gpt-5.4",
+      "prompt": "用 3D 展示 DNA 双螺旋结构",
+      "caseId": "15A",
+      "caseName": "3D DNA 双螺旋",
+      "startedAt": "2026-03-19T04:57:42.642Z",
+      "elapsedMs": 61982,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "anthropic-compat",
+      "model": "gpt-5.4",
+      "prompt": "解释 DNA 复制的过程",
+      "caseId": "15B",
+      "caseName": "DNA 复制过程",
+      "startedAt": "2026-03-19T04:58:44.626Z",
+      "elapsedMs": 35730,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 widget 且未触发 3D"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "kimi-coding",
+      "model": "kimi-k2.5",
+      "prompt": "用 3D 模型展示太阳系的运行原理",
+      "caseId": "14",
+      "caseName": "3D 空间场景",
+      "startedAt": "2026-03-19T04:59:20.357Z",
+      "elapsedMs": 81166,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "kimi-coding",
+      "model": "kimi-k2.5",
+      "prompt": "用 3D 展示 DNA 双螺旋结构",
+      "caseId": "15A",
+      "caseName": "3D DNA 双螺旋",
+      "startedAt": "2026-03-19T05:53:00.405Z",
+      "elapsedMs": 62274,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "kimi-coding",
+      "model": "kimi-k2.5",
+      "prompt": "解释 DNA 复制的过程",
+      "caseId": "15B",
+      "caseName": "DNA 复制过程",
+      "startedAt": "2026-03-19T05:54:02.684Z",
+      "elapsedMs": 92573,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 widget 且未触发 3D"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "zhipu",
+      "model": "glm-5",
+      "prompt": "用 3D 模型展示太阳系的运行原理",
+      "caseId": "14",
+      "caseName": "3D 空间场景",
+      "startedAt": "2026-03-19T05:55:35.261Z",
+      "elapsedMs": 152372,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "zhipu",
+      "model": "glm-5",
+      "prompt": "用 3D 展示 DNA 双螺旋结构",
+      "caseId": "15A",
+      "caseName": "3D DNA 双螺旋",
+      "startedAt": "2026-03-19T05:58:07.634Z",
+      "elapsedMs": 85616,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "zhipu",
+      "model": "glm-5",
+      "prompt": "解释 DNA 复制的过程",
+      "caseId": "15B",
+      "caseName": "DNA 复制过程",
+      "startedAt": "2026-03-19T05:59:33.253Z",
+      "elapsedMs": 145435,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 widget 且未触发 3D"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "volcengine",
+      "model": "doubao-seed-2-0-pro-260215",
+      "prompt": "用 3D 模型展示太阳系的运行原理",
+      "caseId": "14",
+      "caseName": "3D 空间场景",
+      "startedAt": "2026-03-19T06:01:58.691Z",
+      "elapsedMs": 57762,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "volcengine",
+      "model": "doubao-seed-2-0-pro-260215",
+      "prompt": "用 3D 展示 DNA 双螺旋结构",
+      "caseId": "15A",
+      "caseName": "3D DNA 双螺旋",
+      "startedAt": "2026-03-19T06:02:56.456Z",
+      "elapsedMs": 64920,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 show-widget 与 3D 关键特征"
+      },
+      "streamStatus": "complete",
+      "error": null
+    },
+    {
+      "provider": "volcengine",
+      "model": "doubao-seed-2-0-pro-260215",
+      "prompt": "解释 DNA 复制的过程",
+      "caseId": "15B",
+      "caseName": "DNA 复制过程",
+      "startedAt": "2026-03-19T06:04:01.378Z",
+      "elapsedMs": 64899,
+      "ok": true,
+      "check": {
+        "pass": true,
+        "summary": "包含 widget 且未触发 3D"
+      },
+      "streamStatus": "complete",
+      "error": null
+    }
+  ]
+}

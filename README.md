@@ -206,9 +206,9 @@ Adding a new channel only requires adding a new adapter. It does not affect the 
 | Kimi K2.5 | ✅ Tested | Strong visual quality after serial revalidation |
 | Seed 2.0 Pro | ✅ Tested with caveats | Good chart/mockup performance, but still weaker on no-widget restraint |
 | GLM-5 | ✅ Tested | Improved noticeably after serial revalidation |
-| gemini-3.1-pro-preview | Planned | Intended for the next supplementary validation round |
+| gemini-3.1-pro-preview | ✅ Tested with caveats | Completed the 13-case validation set plus the 3D supplement; the remaining known issue is still the no-widget weather prompt |
 
-The detailed validation record lives in [`tests/prompt-validation.md`](./tests/prompt-validation.md). The table above reflects the models that have actually been tested in the current repository workflow, plus the next model already queued for follow-up validation.
+The detailed validation record lives in [`tests/prompt-validation.md`](./tests/prompt-validation.md). The current repository workflow has now covered the 13 main validation cases for Gemini and the 3D supplement (`cases 14 / 15A / 15B`) for all tested models.
 
 ### Multi-model Adaptation Strategy
 
