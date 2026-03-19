@@ -1,8 +1,7 @@
 ---
 name: generative-ui
 description: "在对话中生成交互式 UI 组件（图表、架构图、流程图、计算器、数据可视化）。Use when: 用户请求可视化、图表、流程图、架构图、对比表、数据展示、交互组件，或任何适合用图形化方式呈现的内容。NOT for: 纯文本问答、代码生成、文件操作。"
-homepage: https://github.com/ai-freer/generative-ui-skill
-metadata: { "openclaw": { "emoji": "📊", "requires": { "env": ["CHROME_CDP_URL"] } } }
+metadata: { "openclaw": { "emoji": "📊", "homepage": "https://github.com/ai-freer/generative-ui-skill", "requires": { "env": ["CHROME_CDP_URL"] } } }
 ---
 
 # Generative UI Skill
