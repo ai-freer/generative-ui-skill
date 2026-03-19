@@ -129,9 +129,8 @@ export async function closeBrowser() {
 
 // CLI mode
 if (process.argv[1] && process.argv[1].endsWith('widget-screenshot.mjs')) {
-  const { writeFileSync, readFileSync, mkdtempSync } = await import('node:fs');
+  const { writeFileSync, readFileSync, mkdirSync, existsSync } = await import('node:fs');
   const { join } = await import('node:path');
-  const { tmpdir } = await import('node:os');
 
   const args = process.argv.slice(2);
   const getArg = (name) => {
@@ -176,10 +175,11 @@ if (process.argv[1] && process.argv[1].endsWith('widget-screenshot.mjs')) {
   try {
     const png = await captureWidget(widgetCode, { theme, width });
 
-    const outPath = output || join(
-      mkdtempSync(join(tmpdir(), 'widget-')),
-      `${title || 'widget'}-${Date.now()}.png`
-    );
+    const outPath = output || (() => {
+      const dir = join(process.cwd(), 'imagine');
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      return join(dir, `${title || 'widget'}-${Date.now()}.png`);
+    })();
     writeFileSync(outPath, png);
 
     // Output the path for the agent to use in send action
