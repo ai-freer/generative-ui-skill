@@ -75,27 +75,29 @@ npm install playwright-core
 
 ---
 
-## Step 5：本地验证（在 VPS 上，不依赖 OpenClaw）
+## Step 5：SSH 远程验证（确认 Skill 脚本 + CDP 链路通畅）
+
+通过 SSH 登录 VPS，手动跑脚本确认截图管线正常工作，再进入 Telegram 端到端测试。
 
 ```bash
 export CHROME_CDP_URL=http://localhost:9222
 
-# 5a. 测试截图
+# 5a. 验证 CDP 连接 + 截图管线
 node scripts/widget-screenshot.mjs --file examples/jwt-flow.html --output /tmp/test.png
-ls -la /tmp/test.png  # 应该有文件，大小 > 0
+ls -la /tmp/test.png  # 应有文件，大小 > 0
 
-# 5b. 测试 interceptor
+# 5b. 验证围栏解析
 echo '```show-widget
 {"title":"test","widget_code":"<div>hello</div>"}
 ```' | node scripts/widget-interceptor.mjs
 # 预期输出：{ hasWidget: true, widgets: [...], plainText: "" }
 
-# 5c. 测试 drill-down
+# 5c. 验证 drill-down 提取
 echo '<rect onclick="window.__widgetSendMessage('"'"'详细介绍'"'"')" />' | node scripts/widget-drilldown.mjs
 # 预期输出：{ count: 1, drillDowns: [...], telegram: [...], feishu: {...} }
 ```
 
-> 如果 Step 5 全部通过，说明脚本层面没问题，可以进入 Telegram 端到端测试。
+> 如果 Step 5 全部通过，说明 Skill 脚本和 CDP 链路正常，可以进入 Telegram 端到端测试。
 
 ---
 
