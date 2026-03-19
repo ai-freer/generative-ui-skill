@@ -70,18 +70,6 @@ metadata: { "openclaw": { "emoji": "📊", "requires": { "env": ["CHROME_CDP_URL
 - `examples/calculator.html` — 复利计算器（交互滑块 + 实时图表）
 - `examples/comparison.html` — REST vs GraphQL 对比（SVG 并排图）
 
-## 已验证的模型
-
-| 模型 | 状态 | 备注 |
-|------|------|------|
-| Claude Opus 4.6 | ✅ 已实测 | 整体稳定性最好 |
-| Claude Sonnet 4.6 | ✅ 已实测 | 质量与成本平衡较好 |
-| GPT-5.4 | ✅ 已实测 | 整体结果稳定 |
-| Kimi K2.5 | ✅ 已实测 | 视觉质量表现较强 |
-| Seed 2.0 Pro | ✅ 已实测（有保留） | 图表和 mockup 较好，"无 widget 场景"约束偏弱 |
-| GLM-5 | ✅ 已实测 | 稳定性明显改善 |
-| Gemini 3.1 Pro | ✅ 已实测（有保留） | 已完成主验证用例，"无 widget 场景"仍有误输出 |
-
 ## 技术要求
 
 ### CDN 白名单
