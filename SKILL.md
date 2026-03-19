@@ -43,13 +43,15 @@ send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
 exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
 ```
 
-The script outputs a JSON with `telegram` field containing the button array. Use the `buttons` parameter directly in the send action:
+The script outputs a JSON with extracted drill-down queries. Use these to construct native buttons for the current channel's send action.
+
+Example for Telegram (buttons as top-level 2D array of `{text, callback_data}`):
 
 ```
-send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>", buttons: [[{"text": "Explain etcd", "callback_data": "drill:Explain etcd"}], [{"text": "How kube-proxy works", "callback_data": "drill:How kube-proxy works"}]] }
+send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>", buttons: [[{"text": "Explain etcd", "callback_data": "drill:Explain etcd"}]] }
 ```
 
-**IMPORTANT**: `buttons` is a top-level parameter — a 2D array where each inner array is a row containing `{text, callback_data}` objects. Do NOT nest it inside `fields` or `inline_keyboard`.
+For other channels (Feishu, QQ, etc.), use the channel's native button format. The drill-down script provides the query text — adapt it to whatever button structure the current channel supports.
 
 ### Widget Interactivity on IM Channels
 
