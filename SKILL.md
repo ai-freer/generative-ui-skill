@@ -113,5 +113,6 @@ More explanatory text...
 | | `--output <path>` | Output PNG path (default: `./imagine/`) |
 | | `--theme light\|dark` | Theme (default: light) |
 | | `--width <px>` | Viewport width (default: 680) |
+| | `--wait <ms>` | Explicit wait time in ms (default: auto-detect based on content type; use 3000-5000 for Three.js/3D widgets) |
 | `widget-drilldown.mjs` | `--code <html>` | Extract drill-down buttons from widget_code |
 | | `--file <path>` | Extract from file |

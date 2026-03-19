@@ -4,7 +4,7 @@
  * Renders widget_code to PNG using Playwright + buildWidgetDoc from @generative-ui/renderer.
  *
  * Usage (CLI — called by OpenClaw agent via exec):
- *   node scripts/widget-screenshot.mjs --title "jwt_flow" [--theme light] [--width 680]
+ *   node scripts/widget-screenshot.mjs --title "jwt_flow" [--theme light] [--width 680] [--wait 3000]
  *   (reads model output from stdin, extracts widget by title, screenshots it)
  *
  *   node scripts/widget-screenshot.mjs --file examples/jwt-flow.html --output /tmp/out.png
@@ -18,6 +18,45 @@ import { buildWidgetDoc } from '../packages/renderer/dist/index.js';
 import { interceptWidgets } from './widget-interceptor.mjs';
 
 let browser = null;
+
+/**
+ * Poll until a canvas element has non-blank pixels, or timeout.
+ * @param {import('playwright').Page} page
+ * @param {number} maxWait - max wait in ms
+ */
+async function waitForCanvasRender(page, maxWait = 5000) {
+  const interval = 200;
+  const maxAttempts = Math.ceil(maxWait / interval);
+  for (let i = 0; i < maxAttempts; i++) {
+    const rendered = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) return true; // no canvas, nothing to wait for
+      try {
+        const ctx = canvas.getContext('2d') || canvas.getContext('webgl') || canvas.getContext('webgl2');
+        if (!ctx) return true;
+        // For WebGL: check if anything was drawn
+        if (ctx.drawingBufferWidth !== undefined) {
+          const pixels = new Uint8Array(4);
+          ctx.readPixels(
+            Math.floor(ctx.drawingBufferWidth / 2),
+            Math.floor(ctx.drawingBufferHeight / 2),
+            1, 1, ctx.RGBA, ctx.UNSIGNED_BYTE, pixels
+          );
+          return pixels[0] + pixels[1] + pixels[2] + pixels[3] > 0;
+        }
+        // For 2D canvas: sample center pixel
+        const data = ctx.getImageData(
+          Math.floor(canvas.width / 2),
+          Math.floor(canvas.height / 2),
+          1, 1
+        ).data;
+        return data[0] + data[1] + data[2] + data[3] > 0;
+      } catch { return false; }
+    });
+    if (rendered) return;
+    await page.waitForTimeout(interval);
+  }
+}
 
 /**
  * Resolve playwright/playwright-core from multiple possible locations.
@@ -72,6 +111,7 @@ export async function initBrowser() {
  * @param {number} [options.width=680]
  * @param {number} [options.deviceScaleFactor=2]
  * @param {number} [options.timeout=5000]
+ * @param {number} [options.wait=0] - explicit wait override in ms (0 = auto-detect)
  * @returns {Promise<Buffer>} PNG buffer
  */
 export async function captureWidget(widgetCode, options = {}) {
@@ -80,6 +120,7 @@ export async function captureWidget(widgetCode, options = {}) {
     width = 680,
     deviceScaleFactor = 2,
     timeout = 5000,
+    wait = 0,
   } = options;
 
   const b = await initBrowser();
@@ -92,8 +133,31 @@ export async function captureWidget(widgetCode, options = {}) {
   const html = buildWidgetDoc(widgetCode);
   await page.setContent(html, { waitUntil: 'networkidle', timeout });
 
-  // Extra wait for Chart.js animations / font loading
-  await page.waitForTimeout(500);
+  if (wait > 0) {
+    // Explicit wait override (caller knows best)
+    await page.waitForTimeout(wait);
+  } else {
+    // Smart wait: detect content type and wait accordingly
+    const contentType = await page.evaluate(() => {
+      const hasCanvas = !!document.querySelector('canvas');
+      const hasThreeJS = typeof window.THREE !== 'undefined'
+        || !!document.querySelector('script[src*="three"]');
+      const hasChartJS = typeof window.Chart !== 'undefined'
+        || !!document.querySelector('script[src*="chart"]');
+      return { hasCanvas, hasThreeJS, hasChartJS };
+    });
+
+    if (contentType.hasThreeJS) {
+      // Three.js: CDN load + WebGL init + render — poll for non-blank canvas
+      await waitForCanvasRender(page, 8000);
+    } else if (contentType.hasChartJS || contentType.hasCanvas) {
+      // Chart.js or other canvas: wait for animation + render
+      await waitForCanvasRender(page, 3000);
+    } else {
+      // SVG / static HTML: brief wait for fonts
+      await page.waitForTimeout(500);
+    }
+  }
 
   // Auto-fit height: prefer actual content height
   const height = await page.evaluate(() => {
@@ -143,6 +207,7 @@ if (process.argv[1] && process.argv[1].endsWith('widget-screenshot.mjs')) {
   const output = getArg('--output');
   const theme = getArg('--theme') || 'light';
   const width = parseInt(getArg('--width') || '680', 10);
+  const wait = parseInt(getArg('--wait') || '0', 10);
 
   let widgetCode;
 
@@ -173,7 +238,7 @@ if (process.argv[1] && process.argv[1].endsWith('widget-screenshot.mjs')) {
   }
 
   try {
-    const png = await captureWidget(widgetCode, { theme, width });
+    const png = await captureWidget(widgetCode, { theme, width, wait });
 
     const outPath = output || (() => {
       const dir = join(process.cwd(), 'imagine');
