@@ -53,7 +53,15 @@ clawhub install generative-ui
 curl -s http://localhost:9222/json/version
 
 # 如果没有，启动：
-google-chrome --headless --remote-debugging-port=9222 --no-sandbox &
+google-chrome \
+  --headless \
+  --remote-debugging-port=9222 \
+  --no-sandbox \
+  --use-gl=angle \
+  --use-angle=swiftshader \
+  --enable-webgl \
+  --ignore-gpu-blocklist \
+  --enable-unsafe-swiftshader &
 
 # 设置环境变量（加到 ~/.openclaw/.env 或系统 profile）
 echo 'CHROME_CDP_URL=http://localhost:9222' >> ~/.openclaw/.env
@@ -122,6 +130,7 @@ echo '<rect onclick="window.__widgetSendMessage('"'"'详细介绍'"'"')" />' | n
 |------|---------|
 | exec 找不到脚本 | 检查 `{baseDir}` 是否正确解析：在 agent 对话中让它 `exec: ls {baseDir}/scripts/` |
 | CDP 连接失败 | `curl http://localhost:9222/json/version`，确认 Chrome 进程在跑 |
+| VPS 无 GPU，3D 截图空白 | 确认 CDP Chrome 使用了 `--use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --enable-unsafe-swiftshader` 启动 |
 | renderer import 失败 | `packages/renderer/dist/index.js` 已随 git 提交，确认 `git pull` 后文件存在 |
 | Playwright 找不到 | `npm ls playwright` 或检查 npx cache |
 | 截图空白 / 报错 | 先用 `--file` 模式测试静态 HTML，排除 widget 解析问题 |

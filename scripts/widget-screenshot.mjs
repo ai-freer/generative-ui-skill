@@ -21,6 +21,14 @@ let browser = null;
 
 const THREE_RENDER_SETTLE_MS = 1200;
 const CANVAS_RENDER_SETTLE_MS = 500;
+const SOFTWARE_GL_ARGS = [
+  '--use-gl=angle',
+  '--use-angle=swiftshader',
+  '--enable-webgl',
+  '--ignore-gpu-blocklist',
+  '--enable-unsafe-swiftshader',
+  '--disable-dev-shm-usage',
+];
 
 /**
  * Poll until a canvas element has non-blank pixels, or timeout.
@@ -56,9 +64,10 @@ async function waitForCanvasRender(page, maxWait = 5000) {
         return data[0] + data[1] + data[2] + data[3] > 0;
       } catch { return false; }
     });
-    if (rendered) return;
+    if (rendered) return true;
     await page.waitForTimeout(interval);
   }
+  return false;
 }
 
 /**
@@ -113,7 +122,10 @@ export async function initBrowser() {
   if (cdpUrl) {
     browser = await pw.chromium.connectOverCDP(cdpUrl);
   } else {
-    browser = await pw.chromium.launch({ headless: true });
+    browser = await pw.chromium.launch({
+      headless: true,
+      args: SOFTWARE_GL_ARGS,
+    });
   }
   return browser;
 }
@@ -165,7 +177,15 @@ export async function captureWidget(widgetCode, options = {}) {
     if (contentType.hasThreeJS) {
       // Three.js: CDN load + WebGL init + first render, then allow extra
       // settle time for scene bootstrapping before capture.
-      await waitForCanvasRender(page, 8000);
+      const rendered = await waitForCanvasRender(page, 8000);
+      if (!rendered) {
+        const mode = process.env.CHROME_CDP_URL ? 'cdp' : 'launch';
+        throw new Error(
+          mode === 'cdp'
+            ? 'Three.js/WebGL did not render on the CDP Chrome instance. On GPU-less VPS hosts, start Chrome with software WebGL flags such as: --use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --enable-unsafe-swiftshader'
+            : 'Three.js/WebGL did not render even after enabling SwiftShader software rendering. Check whether the VPS blocks headless WebGL, or increase the 3D wait time and inspect browser logs.'
+        );
+      }
       await waitForRenderSettle(page, THREE_RENDER_SETTLE_MS);
     } else if (contentType.hasChartJS || contentType.hasCanvas) {
       // Canvas widgets often draw a first frame before labels/animations finish.
