@@ -37,13 +37,22 @@ Output: file path to the generated PNG.
 send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
 ```
 
-**Step 3** (optional) — Extract drill-down buttons if the widget has `__widgetSendMessage` calls:
+**Step 3** — Extract drill-down buttons and send image WITH buttons:
 
 ```
 exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
 ```
 
-Then attach buttons in the send action for user follow-up.
+Attach the extracted buttons in the send action so users can tap to explore further. This is how widget interactivity works on IM channels — drill-down clicks become native buttons.
+
+### Widget Interactivity on IM Channels
+
+On Web, users click elements inside the widget. On IM channels (Telegram/Feishu/QQ), this interactivity is preserved through native buttons. For this to work:
+
+- **Always include `window.__widgetSendMessage('...')` calls in your widget code** — even though the widget will be rendered as a static PNG, these calls are extracted and converted to native channel buttons
+- Add drill-down interactions on meaningful nodes: key terms, data points, process steps, comparison items
+- Each widget should have at least 2-3 follow-up question buttons
+- Example: `<rect onclick="window.__widgetSendMessage('Explain etcd in detail')" ...>`
 
 ### Common Mistakes
 
