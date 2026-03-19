@@ -99,10 +99,12 @@ Widget 内的外部资源只能从以下 CDN 加载（CSP 强制执行）：
 
 ### 截图流程
 
-1. 输出 `show-widget` 围栏后，调用截图脚本（通过 exec 工具）：
+> 脚本路径使用 `{baseDir}` 占位符，OpenClaw 会自动替换为本 Skill 的安装目录。
+
+1. 输出 `show-widget` 围栏后，调用截图脚本（通过 exec 工具，host 设为 gateway）：
 
 ```
-exec: echo '<模型回复全文>' | node scripts/widget-screenshot.mjs --title "<widget_title>"
+exec: echo '<模型回复全文>' | node {baseDir}/scripts/widget-screenshot.mjs --title "<widget_title>"
 ```
 
 脚本会从回复中提取对应的 show-widget 围栏，渲染为 PNG，输出文件路径。
@@ -116,10 +118,16 @@ send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
 3. 如果 widget 包含 drill-down 按钮（`__widgetSendMessage` 调用），可以提取按钮列表：
 
 ```
-exec: echo '<widget_code>' | node scripts/widget-drilldown.mjs
+exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
 ```
 
 然后在 send action 中附加 buttons 参数，让用户可以点击追问。
+
+### 环境要求
+
+- exec 工具需使用 `host: gateway`（或 `node`），以继承宿主环境变量（如 `CHROME_CDP_URL`）
+- 如果 VPS 上使用已有的 Chrome 实例，需设置环境变量：`CHROME_CDP_URL=http://localhost:9222`
+- 如果未设置 `CHROME_CDP_URL`，脚本会自动启动 headless Chromium（需要 Playwright + Chromium 已安装）
 
 ### 脚本参数
 

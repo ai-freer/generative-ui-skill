@@ -3,5 +3,6 @@
 .DS_Store
 node_modules/
 dist/
+!packages/renderer/dist/
 demo/
 custom-providers.json
