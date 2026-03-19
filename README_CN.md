@@ -25,12 +25,19 @@
 
 ## 当前发布状态
 
-当前仓库对外发布时，建议按下面这个口径理解项目状态：
+- `main`：包含 **M1 + M2 + M3a** 全部成果。Web Playground 可直接使用，渠道适配脚本（截图 + drill-down 按钮提取）已就绪。
+- **Telegram / 飞书渠道适配**已基本调通：widget 截图为 PNG + drill-down 交互映射为原生按钮。
+- **Plugin Hook**（`widget-fence-cleaner`）可选安装，在消息发送前自动清洗围栏代码。
 
-- `main`：可部署、可使用的 **Web Playground 主线**，代表目前已经可交付的 **M1 + M2** 成果。
-- `m3/channel-adapters`：渠道适配专项分支，已经有 **M3a 原型脚本**，但 **尚未完成** Telegram、飞书等真实渠道的联调与端到端验证。
+### 渠道适配注意事项
 
-也就是说，项目现在已经适合作为开源的本地 Web Playground 使用；而多渠道投递能力仍然属于后续持续开发中的部分。
+渠道适配依赖 agent 主动调用截图脚本并发送图片，对模型的 **Skill 指令遵循能力要求较高**。实测表现：
+
+- **强模型**（Claude Opus/Sonnet、GPT-5.4）—— 能稳定执行完整的截图 + 发送 + 按钮提取流程
+- **中等模型**（Kimi K2.5、Seed 2.0 Pro 等）—— 可能偶尔跳过截图步骤或遗漏按钮提取，需要更强的 prompt 引导
+- **较弱模型** —— 可能无法可靠地遵循多步骤 Skill 指令，不建议用于渠道适配场景
+
+Web Playground 不受此限制，任何能输出 `show-widget` 围栏的模型都可以正常使用。
 
 ---
 
@@ -245,9 +252,11 @@ npm run test:e2e   # 仅 E2E + widget 渲染检查
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | M0 | 技术分析 + 源码研究 + 项目规划 | ✅ 完成 |
-| M1 | Prompt Skill 创建 + 验证 | ✅ 完成（待模型验证） |
-| M2 | 渲染运行时 JS 库 `@generative-ui/renderer` | 开发中 |
-| M3 | 渠道适配层 | 待开始 |
+| M1 | Prompt Skill 创建 + 验证 | ✅ 完成 |
+| M2 | 渲染运行时 JS 库 `@generative-ui/renderer` | ✅ 核心完成 |
+| M3a | 渠道适配脚本（截图 + drill-down + 围栏清洗） | ✅ 完成 |
+| M3b | Telegram / 飞书联调验证 | ✅ 基本调通 |
+| M3c | Aight WKWebView 集成 | 待开始 |
 
 详细开发计划参见 [DEVELOPMENT.md](./DEVELOPMENT.md)，渠道适配架构参见 [architecture/m3-channel-adapters.md](./architecture/m3-channel-adapters.md)。
 

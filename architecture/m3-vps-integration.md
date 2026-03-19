@@ -133,8 +133,8 @@ echo '<rect onclick="window.__widgetSendMessage('"'"'详细介绍'"'"')" />' | n
 
 ## 后续步骤
 
-- [ ] Step 5 本地验证通过
-- [ ] Step 6 Telegram 端到端通过
-- [ ] S4b message_sending Plugin Hook（可选，围栏清洗）
-- [ ] M3b+ 飞书适配
+- [x] Step 5 SSH 远程验证通过
+- [x] Step 6 Telegram 端到端通过
+- [x] S4b message_sending Plugin Hook（widget-fence-cleaner）
+- [x] 飞书截图 + PNG 发送调通
 - [ ] M3c Aight WKWebView 集成

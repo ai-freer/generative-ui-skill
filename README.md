@@ -25,12 +25,19 @@ The goal of this project is to abstract that capability into a **general-purpose
 
 ## Current Release Status
 
-This repository is currently published with the following practical status:
+- `main` contains the full **M1 + M2 + M3a** deliverables. The Web Playground is ready to use, and channel adaptation scripts (screenshot + drill-down button extraction) are in place.
+- **Telegram / Feishu channel adaptation** is operational: widgets are screenshotted as PNG images, and drill-down interactions are mapped to native channel buttons.
+- **Plugin Hook** (`widget-fence-cleaner`) is available as an optional install to auto-clean widget fences from outgoing messages.
 
-- `main` is the deployable Web Playground line, representing the currently usable outcome of **M1 + M2**.
-- `m3/channel-adapters` is the dedicated channel-adapter branch. It already contains **M3a prototype scripts**, but it has **not** completed real channel integration and end-to-end validation for Telegram, Feishu, or other outbound channels.
+### Channel Adaptation Caveats
 
-In other words, the project is already usable today as an open-source local Web Playground, while the multi-channel delivery layer is still under active follow-up development.
+Channel adaptation relies on the agent proactively calling screenshot scripts and sending images, which demands **strong Skill instruction-following capability** from the model. Observed performance:
+
+- **Strong models** (Claude Opus/Sonnet, GPT-5.4) — reliably execute the full screenshot + send + button extraction workflow
+- **Mid-tier models** (Kimi K2.5, Seed 2.0 Pro, etc.) — may occasionally skip the screenshot step or miss button extraction; stronger prompt guidance helps
+- **Weaker models** — may not reliably follow multi-step Skill instructions; not recommended for channel adaptation scenarios
+
+The Web Playground is not affected by this limitation — any model capable of outputting `show-widget` fences works fine.
 
 ---
 
@@ -253,9 +260,11 @@ npm run test:e2e   # E2E tests plus widget rendering checks
 | Phase | Scope | Status |
 |------|------|------|
 | M0 | Technical analysis, source research, and project planning | ✅ Done |
-| M1 | Prompt Skill creation and validation | ✅ Done (pending model validation) |
-| M2 | Rendering runtime library `@generative-ui/renderer` | In progress |
-| M3 | Channel adapter layer | Not started |
+| M1 | Prompt Skill creation and validation | ✅ Done |
+| M2 | Rendering runtime library `@generative-ui/renderer` | ✅ Core complete |
+| M3a | Channel adaptation scripts (screenshot + drill-down + fence cleaner) | ✅ Done |
+| M3b | Telegram / Feishu integration testing | ✅ Operational |
+| M3c | Aight WKWebView integration | Not started |
 
 For the detailed development roadmap, see [DEVELOPMENT.md](./DEVELOPMENT.md). For the channel adaptation architecture, see [architecture/m3-channel-adapters.md](./architecture/m3-channel-adapters.md).
 

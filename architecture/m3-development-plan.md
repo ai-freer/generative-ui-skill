@@ -650,27 +650,28 @@ Phase 1 — 调研（已完成 ✅）
   确认飞书插件能力完整
   确认 Chromium 在 sandbox 中可用
 
-Phase 2 — M3a 核心实现（本地 MacBook 开发）
+Phase 2 — M3a 核心实现（已完成 ✅）
   S1 Widget Interceptor（复用 M2 parseShowWidgetFence）
-  S2 Screenshot Service（Playwright + buildWidgetDoc）
+  S2 Screenshot Service（Playwright + buildWidgetDoc + smart wait）
   S3 Drill-down 提取
-  S4a SKILL.md 追加截图指令
-  S4b 可选 message_sending Plugin Hook（围栏清洗）
+  S4a SKILL.md 截图指令（英文，强制规则前置）
+  S4b message_sending Plugin Hook（widget-fence-cleaner）
   本地独立测试（截图验证、interceptor 验证）
 
-Phase 3 — M3b Telegram 联调（VPS 部署测试）
+Phase 3 — M3b Telegram / 飞书联调（已完成 ✅ 基本调通）
   Push 到 repo → VPS 拉取安装 Skill
-  确认 Chromium 在 VPS exec 环境可用
-  Telegram 端到端测试
-  修复问题
+  CDP 连接已有 Chrome 实例
+  Telegram 截图 + 发送 PNG 验证通过
+  飞书截图 + 发送 PNG 验证通过
+  SKILL.md 多轮迭代优化（指令遵循、按钮格式）
+  已知限制：模型 Skill 指令遵循能力要求较高，弱模型可能跳过截图步骤
 
-Phase 4 — M3b+ 飞书适配（VPS 部署测试）
-  飞书截图 → 图片卡片（复用 S2）
+Phase 4 — M3b+ 飞书增强（待定）
   飞书 Markdown 卡片（结构化 widget）
   飞书按钮回调 → drill-down
-  飞书端到端测试
+  视需求决定是否推进
 
-Phase 5 — M3c Aight（需 iOS 配合）
+Phase 5 — M3c Aight（待开始，需 iOS 配合）
   S5 壳页面
   S6 Swift 集成
   S7 联调测试
