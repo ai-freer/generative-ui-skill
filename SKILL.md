@@ -99,15 +99,20 @@ Widget 内的外部资源只能从以下 CDN 加载（CSP 强制执行）：
 
 ## 渠道适配：Widget 截图与投递（M3）
 
-在 Telegram、飞书等非 Web 渠道，widget 无法直接渲染为 iframe。Agent 需要在输出 `show-widget` 围栏后，主动调用截图脚本将 widget 渲染为 PNG 图片并发送给用户。
+**重要：在 Telegram、飞书、QQ 等非 Web 渠道，你必须将 widget 渲染为 PNG 图片再发送。绝对不要把 show-widget 围栏的原始代码直接发给用户——用户看到的会是一堆乱码 HTML。**
 
-> Web Playground 和 Aight App 支持直接渲染 widget，无需执行此步骤。
+### 强制规则
 
-### 截图流程
+1. **必须使用 `show-widget` 围栏**（不是 `html`、`svg` 或其他围栏标记）
+2. **每次输出 `show-widget` 围栏后，必须立即执行截图脚本**，不能跳过
+3. **用截图生成的 PNG 图片发送给用户**，不要发送原始代码
+4. Web Playground 和 Aight App 支持直接渲染 widget，是唯一不需要截图的渠道
+
+### 截图流程（每次输出 widget 后必须执行）
 
 > 脚本路径使用 `{baseDir}` 占位符，OpenClaw 会自动替换为本 Skill 的安装目录。
 
-1. 输出 `show-widget` 围栏后，调用截图脚本（通过 exec 工具，host 设为 gateway）：
+**Step 1** — 输出 `show-widget` 围栏后，立即调用截图脚本（通过 exec 工具，host 设为 gateway）：
 
 ```
 exec: echo '<模型回复全文>' | node {baseDir}/scripts/widget-screenshot.mjs --title "<widget_title>"
@@ -115,19 +120,26 @@ exec: echo '<模型回复全文>' | node {baseDir}/scripts/widget-screenshot.mjs
 
 脚本会从回复中提取对应的 show-widget 围栏，渲染为 PNG，输出文件路径。
 
-2. 用 send action 发送图片到当前会话：
+**Step 2** — 用 send action 发送图片到当前会话：
 
 ```
 send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
 ```
 
-3. 如果 widget 包含 drill-down 按钮（`__widgetSendMessage` 调用），可以提取按钮列表：
+**Step 3**（可选）— 如果 widget 包含 drill-down 按钮（`__widgetSendMessage` 调用），提取按钮列表：
 
 ```
 exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
 ```
 
 然后在 send action 中附加 buttons 参数，让用户可以点击追问。
+
+### 常见错误（不要犯）
+
+- ❌ 用 `html` 围栏输出 widget 代码 → 用户看到乱码
+- ❌ 输出 `show-widget` 围栏后不截图 → 用户看到原始 JSON + HTML
+- ❌ 把 widget_code 当文本消息发送 → 用户看到一堆代码
+- ✅ 正确做法：`show-widget` 围栏 → 截图 → 发送 PNG 图片
 
 ### 环境要求
 
