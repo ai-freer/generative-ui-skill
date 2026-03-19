@@ -19,6 +19,9 @@ import { interceptWidgets } from './widget-interceptor.mjs';
 
 let browser = null;
 
+const THREE_RENDER_SETTLE_MS = 1200;
+const CANVAS_RENDER_SETTLE_MS = 500;
+
 /**
  * Poll until a canvas element has non-blank pixels, or timeout.
  * @param {import('playwright').Page} page
@@ -55,6 +58,18 @@ async function waitForCanvasRender(page, maxWait = 5000) {
     });
     if (rendered) return;
     await page.waitForTimeout(interval);
+  }
+}
+
+/**
+ * Wait a little longer after the first visible render so async scene setup,
+ * late texture/material work, and iframe-like post-load tasks can settle.
+ * @param {import('playwright').Page} page
+ * @param {number} delayMs
+ */
+async function waitForRenderSettle(page, delayMs = 0) {
+  if (delayMs > 0) {
+    await page.waitForTimeout(delayMs);
   }
 }
 
@@ -148,11 +163,14 @@ export async function captureWidget(widgetCode, options = {}) {
     });
 
     if (contentType.hasThreeJS) {
-      // Three.js: CDN load + WebGL init + render — poll for non-blank canvas
+      // Three.js: CDN load + WebGL init + first render, then allow extra
+      // settle time for scene bootstrapping before capture.
       await waitForCanvasRender(page, 8000);
+      await waitForRenderSettle(page, THREE_RENDER_SETTLE_MS);
     } else if (contentType.hasChartJS || contentType.hasCanvas) {
-      // Chart.js or other canvas: wait for animation + render
+      // Canvas widgets often draw a first frame before labels/animations finish.
       await waitForCanvasRender(page, 3000);
+      await waitForRenderSettle(page, CANVAS_RENDER_SETTLE_MS);
     } else {
       // SVG / static HTML: brief wait for fonts
       await page.waitForTimeout(500);

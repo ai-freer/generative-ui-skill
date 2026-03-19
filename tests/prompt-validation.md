@@ -190,6 +190,130 @@
 6. 点击可交互元素，确认 `window.__widgetSendMessage()` 调用正确
 7. 检查浏览器控制台无 CSP 违规报错
 
+## 自动化验证计划
+
+当前“渠道截图 + 按钮映射”主要依赖手工测试，回归成本高。后续建议补齐一套**分层自动化验证**，目标不是替代最终人工 smoke test，而是在每次调整 `prompt / screenshot / drill-down / adapter` 后，先提供一层稳定、快速、可重复的基础保障。
+
+### 第一层：Pipeline 自动化验证
+
+目标：验证 `模型输出 → widget 解析 → 截图 → drill-down 提取 → 渠道 payload 组装` 这条链路不断。
+
+建议新增脚本：
+
+- `scripts/pipeline-validation-runner.mjs`
+
+输入来源：
+
+- 优先复用 `tests/manual-validation/` 中已沉淀的真实模型输出样本
+- 每个样本至少包含完整回复文本，能够喂给 `widget-interceptor.mjs`
+
+执行步骤：
+
+1. 读取样本回复文本
+2. 调用 `widget-interceptor.mjs` 或对应模块 API，提取 `title / widgetCode / plainText`
+3. 调用 `widget-screenshot.mjs` 或 `captureWidget()` 生成 PNG
+4. 调用 `widget-drilldown.mjs` 或 `extractDrillDowns()` 提取 drill-down
+5. 调用 mock channel adapter，组装 Telegram / Feishu payload
+
+最低断言：
+
+- 至少解析出 1 个 widget
+- `title` 非空，`widgetCode` 非空
+- PNG 文件存在，大小大于 0
+- PNG 宽高在合理范围内
+- drill-down 数量符合预期下限
+- Telegram payload / Feishu payload 结构合法
+
+这层测试的价值最高，能优先发现：
+
+- 围栏解析失效
+- 截图脚本回归
+- 3D / canvas 等待逻辑失效
+- drill-down 正则提取失败
+- 渠道按钮结构被改坏
+
+### 第二层：截图轻量回归
+
+目标：避免“能出 PNG，但截图为空白、半渲染、只截到背景”这类问题。
+
+建议挑选固定 case：
+
+- 1 个 SVG 流程图
+- 1 个 Chart.js 图表
+- 1 个 HTML mockup
+- 2 个 3D case（例如太阳系 / DNA）
+
+建议新增脚本：
+
+- `scripts/screenshot-regression.mjs`
+
+建议断言：
+
+- 文件大小阈值：过小说明可能空白或渲染失败
+- 图片尺寸阈值：防止高度坍塌或 viewport 异常
+- 非背景像素比例超过阈值：避免整张图接近纯背景色
+- 3D case 单独设置更严格阈值
+
+这一层先不建议上来做像素级 golden diff，因为 3D / canvas 结果有一定抖动，维护成本高。先做“轻量健康检查”更稳。
+
+### 第三层：Mock 渠道适配验证
+
+目标：验证“图片 + 按钮”最终生成的 outbound payload 是否符合渠道约束，而不依赖真实 Telegram / 飞书网络调用。
+
+建议新增模块或脚本：
+
+- `tests/mocks/channel-adapters/telegram.mjs`
+- `tests/mocks/channel-adapters/feishu.mjs`
+
+建议断言：
+
+- `media` 指向真实存在的 PNG 文件
+- caption / title 存在
+- Telegram buttons 为二维数组
+- Feishu action/button JSON 结构完整
+- 按钮数量、行数符合当前排版规则
+- 空 drill-down 场景能正确降级为“仅发送图片”
+
+这一层可以把“渠道格式问题”提前暴露，不必每次都真的发到机器人里再点开看。
+
+### 不建议一开始就做的自动化
+
+- 真 Telegram Bot / 真飞书机器人端到端自动发消息
+- OCR 校验截图文字内容
+- 全量像素级 golden image 对比
+
+原因：
+
+- 接入和维护成本高
+- 容易引入外部网络、账号权限、限流等不稳定因素
+- 对当前阶段的“基础回归保障”来说性价比不高
+
+### 推荐落地顺序
+
+1. 先做 `pipeline-validation-runner.mjs`
+2. 直接复用 `tests/manual-validation/` 的历史样本
+3. 产出 `summary.json`
+4. 在本地与 CI 中先跑最小 case 集：SVG / Chart.js / 3D 各 1-2 条
+5. 稳定后再补截图轻量回归和 mock adapter 校验
+
+### 执行建议
+
+后续凡是涉及以下改动，至少先跑一次自动化 pipeline：
+
+- `SKILL.md`
+- `prompts/`
+- `scripts/widget-screenshot.mjs`
+- `scripts/widget-drilldown.mjs`
+- `scripts/widget-interceptor.mjs`
+- 未来的 Telegram / Feishu adapter 实现
+
+自动化通过后，再补一次最小人工 smoke test：
+
+- Telegram 实测 1 条
+- 飞书实测 1 条
+
+这样可以把“全靠手工点 bot 看效果”收敛成“自动化先兜底，人工只做最后确认”。
+
 ## 结果记录
 
 ### 汇总结论
