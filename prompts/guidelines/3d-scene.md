@@ -39,6 +39,12 @@ Use the `show-widget` code fence (HTML mode) for 3D scenes. Three.js renders int
 
 Every 3D widget uses this exact shell. The LLM writes scene content (meshes, materials, helpers, camera positioning) **after** the `init()` block as top-level statements — never inside `init()`.
 
+**Progressive rendering rule — strict ordering:**
+- The shell must end right after the first `if (window.THREE && THREE.OrbitControls) init();`
+- That `init();` line must appear immediately after the shell, not at the end of a long scene-building script
+- All mesh creation, `scene.add(...)`, state arrays, click target registration, labels, and step data must appear after that line as top-level code
+- Forbidden pattern: building the entire scene inside `init()` and calling `init();` only at the very end. That shape prevents early iframe boot and collapses streaming back to a placeholder
+
 ```html
 <style>
 canvas { display: block; width: 100% !important; height: 420px !important; }
@@ -92,6 +98,7 @@ if (window.THREE && THREE.OrbitControls) init();
 **Key decisions in this boilerplate:**
 - `var scene, camera, renderer, controls` declared at script top level — these become `window` properties, accessible to external code injection via `postMessage`. Other local variables (`canvas`, `W`, `H`, `sun`) stay inside `init()`.
 - **Scene content lives outside `init()`** — mesh code is written as top-level statements after the `init()` block. Since `scene`, `camera`, `renderer`, `controls` are global variables, they are accessible from top-level code. This structure enables progressive rendering: the shell (init + animate loop) runs first, then mesh code streams in and objects appear incrementally as `scene.add()` is called.
+- **`init();` is the shell boundary** — once the first `init();` line appears, the iframe can boot. If that line is delayed until after all scene-building code, streaming loses the progressive effect even if the final widget still works.
 - `alpha: true` — transparent background, host provides the bg. Works in both light and dark mode without any CSS variable detection.
 - `autoRotate` defaults to off. Only enable it (`controls.autoRotate = true; controls.autoRotateSpeed = 0.6;`) for orbital and molecular scenes where continuous rotation helps the user see all sides. Architectural, process, and static scenes should leave it off so the user controls the camera.
 - `enableDamping` — smooth camera feel without a physics engine.
@@ -116,6 +123,7 @@ canvas { display: block; width: 100% !important; height: 420px !important; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" onload="init()"></script>
 <script>
 var scene, camera, renderer, controls;
+var updateLabels = function() {};
 function init() {
   // ... same as base shell, plus updateLabels() in animate loop
 }
@@ -126,6 +134,8 @@ if (window.THREE && THREE.OrbitControls) init();
 ```
 
 The process shell adds `.scene-wrap` (relative container) and `#labels` (absolute overlay). See `examples/brewing-process.html` for the complete working reference.
+
+For process scenes, `updateLabels` must exist in the shell as a no-op function before `init()` runs. Later streamed code can replace it with the real implementation after the shell has already booted.
 
 ### Lighting
 

@@ -7,7 +7,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { searchWeb } from './lib/search.js';
 import { loadSystemPrompt, MODULE_FILES } from './lib/prompt.js';
-import { detectTruncation, runPlanner } from './lib/planner.js';
+import { detectTruncation, analyzeTruncation, runPlanner } from './lib/planner.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, '.env') });
@@ -721,7 +721,8 @@ app.post('/api/chat', async (req, res) => {
     log(`[stream] done, total chunks=${chunkCount}`);
 
     // Detect truncated widget fences — retry once, then fall back to Planner
-    const truncated = fullStreamedText && detectTruncation(fullStreamedText);
+    const truncationInfo = analyzeTruncation(fullStreamedText || '');
+    const truncated = truncationInfo.truncated;
     log(`[stream] truncation check: ${truncated ? 'TRUNCATED' : 'OK — no truncation'}`);
     sendEvent({ stream_status: truncated ? 'truncated' : 'complete' });
 
@@ -886,6 +887,7 @@ app.post('/api/chat', async (req, res) => {
             callModel, callModelStream, systemPrompt,
             originalMessages, truncatedText: fullStreamedText,
             userRequest, sendEvent, log,
+            plannerMode: truncationInfo.is3D ? 'progressive3d' : 'default',
           });
           if (plannerResult) {
             sendEvent({ planner_content: plannerResult });

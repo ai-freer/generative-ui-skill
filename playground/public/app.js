@@ -5,6 +5,10 @@ import {
   isShowWidgetFence,
   parseShowWidgetFence,
   detect3DWidget,
+  detect3DShellComplete,
+  buildEarly3DShell,
+  extract3DInjectChunk,
+  extractCompleteStatements,
   textToHtml,
 } from './lib/parser.js';
 
@@ -65,6 +69,7 @@ import {
   // Per-session streaming state: sessionId -> { fragment, streaming }
   // fragment: DocumentFragment holding the live DOM while session is in background
   const activeStreams = new Map();
+  const progressive3DPreviews = new Set();
 
   function updateModulePills(activeModules) {
     document.querySelectorAll('.mod-pill').forEach((el) => {
@@ -376,6 +381,7 @@ import {
     setStatus(`正在调用 ${providerName || 'Provider'} · ${session.model}…`);
 
     const apiMessages = session.messages.map((m) => ({ role: m.role, content: m.content }));
+    let renderState = null;
 
     try {
       const res = await fetch('/api/chat', {
@@ -401,7 +407,7 @@ import {
       const dec = new TextDecoder();
       let rawBuffer = '';
       let streamText = '';
-      const renderState = createRenderState(bubble);
+      renderState = createRenderState(bubble);
 
       let plannerActive = false;
       let plannerEl = null;
@@ -472,6 +478,8 @@ import {
               renderState.activeTextEl = newState.activeTextEl;
               renderState.previewEl = null;
               renderState.placeholderEl = null;
+              resetProgressive3D(renderState);
+              renderState.progressive3D = null;
               renderState.container = newState.container;
               renderStreamChunk(renderState, streamText);
             }
@@ -481,6 +489,7 @@ import {
               // Remove streaming preview / placeholder
               if (renderState.previewEl) { renderState.previewEl.remove(); renderState.previewEl = null; }
               if (renderState.placeholderEl) { renderState.placeholderEl.remove(); renderState.placeholderEl = null; }
+              resetProgressive3D(renderState);
               plannerEl = document.createElement('div');
               plannerEl.className = 'planner-progress';
               plannerEl.innerHTML = '<p class="thinking">正在规划生成方案…</p>';
@@ -574,6 +583,9 @@ import {
       }
       return false;
     } finally {
+      if (renderState) {
+        resetProgressive3D(renderState, { removeNode: false });
+      }
       activeStreams.delete(session.id);
       updateSendButton();
       renderSessionList();
@@ -855,8 +867,57 @@ import {
       activeTextEl: textEl,
       placeholderEl: null,
       previewEl: null,
+      progressive3D: null,
       container: container,
     };
+  }
+
+  function resetProgressive3D(state, options = {}) {
+    const progressive = state.progressive3D;
+    if (!progressive) return;
+    progressive3DPreviews.delete(progressive);
+    if (options.removeNode !== false && progressive.wrap?.parentNode) {
+      progressive.wrap.remove();
+    }
+    state.progressive3D = null;
+  }
+
+  function flushProgressive3DCode(progressive) {
+    if (!progressive?.ready || !progressive.pending.length || !progressive.iframe?.contentWindow) return;
+    while (progressive.pending.length) {
+      progressive.iframe.contentWindow.postMessage({
+        type: 'injectCode',
+        code: progressive.pending.shift(),
+      }, '*');
+    }
+  }
+
+  function enqueueProgressive3DCode(progressive, code) {
+    if (!code) return;
+    progressive.pending.push(code);
+    flushProgressive3DCode(progressive);
+  }
+
+  function ensureProgressive3DPreview(state, shellCode) {
+    if (state.progressive3D) return state.progressive3D;
+    const wrap = document.createElement('div');
+    wrap.className = 'widget-wrap widget-3d-progressive';
+    const iframe = document.createElement('iframe');
+    iframe.sandbox = 'allow-scripts';
+    iframe.title = '3d-widget';
+    iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(shellCode));
+    wrap.appendChild(iframe);
+    state.container.appendChild(wrap);
+    state.progressive3D = {
+      wrap,
+      iframe,
+      ready: false,
+      pending: [],
+      injectedEnd: shellCode.length,
+      remainder: '',
+    };
+    progressive3DPreviews.add(state.progressive3D);
+    return state.progressive3D;
   }
 
   function renderStreamChunk(state, streamText) {
@@ -884,14 +945,22 @@ import {
         state.placeholderEl = null;
       }
 
-      const wrap = document.createElement('div');
-      wrap.className = 'widget-wrap';
-      const iframe = document.createElement('iframe');
-      iframe.sandbox = 'allow-scripts';
-      iframe.title = w.title;
-      iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(w.widget_code));
-      wrap.appendChild(iframe);
-      state.container.appendChild(wrap);
+      if (state.progressive3D) {
+        const progressive = state.progressive3D;
+        progressive3DPreviews.delete(progressive);
+        progressive.iframe.title = w.title;
+        progressive.iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(w.widget_code));
+        state.progressive3D = null;
+      } else {
+        const wrap = document.createElement('div');
+        wrap.className = 'widget-wrap';
+        const iframe = document.createElement('iframe');
+        iframe.sandbox = 'allow-scripts';
+        iframe.title = w.title;
+        iframe.srcdoc = buildWidgetDoc(sanitizeForIframe(w.widget_code));
+        wrap.appendChild(iframe);
+        state.container.appendChild(wrap);
+      }
 
       state.activeTextEl = document.createElement('div');
       state.activeTextEl.className = 'stream-text';
@@ -922,20 +991,34 @@ import {
         const is3D = detect3DWidget(partialCode);
 
         if (is3D) {
-          // Conservative fallback: 3D widgets stay on a stable placeholder
-          // until the full fence closes, then we render the final iframe once.
           if (state.previewEl) {
             state.previewEl.remove();
             state.previewEl = null;
           }
-          if (!state.placeholderEl) {
-            state.placeholderEl = document.createElement('div');
-            state.placeholderEl.className = 'widget-wrap widget-placeholder';
-            state.placeholderEl.innerHTML = '<p class="typing">正在生成 3D 场景…</p>';
-            state.container.appendChild(state.placeholderEl);
+
+          const shell = detect3DShellComplete(partialCode);
+          if (!shell.isComplete) {
+            resetProgressive3D(state);
+            if (!state.placeholderEl) {
+              state.placeholderEl = document.createElement('div');
+              state.placeholderEl.className = 'widget-wrap widget-placeholder';
+              state.placeholderEl.innerHTML = '<p class="typing">正在生成 3D 场景…</p>';
+              state.container.appendChild(state.placeholderEl);
+            }
+          } else {
+            if (state.placeholderEl) {
+              state.placeholderEl.remove();
+              state.placeholderEl = null;
+            }
+            const progressive = ensureProgressive3DPreview(state, buildEarly3DShell(partialCode, shell.shellEnd));
+            const delta = extract3DInjectChunk(partialCode, progressive.injectedEnd);
+            const extracted = extractCompleteStatements(progressive.remainder + delta.code);
+            enqueueProgressive3DCode(progressive, extracted.safe);
+            progressive.remainder = extracted.remainder;
+            progressive.injectedEnd = delta.end;
           }
         } else {
-          // Non-3D — standard streaming preview
+          resetProgressive3D(state);
           if (state.placeholderEl) {
             state.placeholderEl.remove();
             state.placeholderEl = null;
@@ -948,6 +1031,7 @@ import {
           state.previewEl.innerHTML = stripUnclosedScript(sanitizeForStreaming(partialCode));
         }
       } else {
+        resetProgressive3D(state);
         if (!state.placeholderEl && !state.previewEl) {
           state.placeholderEl = document.createElement('div');
           state.placeholderEl.className = 'widget-wrap widget-placeholder';
@@ -965,12 +1049,22 @@ import {
         state.previewEl.remove();
         state.previewEl = null;
       }
+      resetProgressive3D(state);
     }
 
     return parsed.length;
   }
 
   window.addEventListener('message', (e) => {
+    if (e.data?.type === 'widgetReady') {
+      for (const progressive of progressive3DPreviews) {
+        if (progressive.iframe.contentWindow === e.source) {
+          progressive.ready = true;
+          flushProgressive3DCode(progressive);
+          return;
+        }
+      }
+    }
     if (e.data?.type === 'widgetResize' && typeof e.data.height === 'number') {
       const iframes = document.querySelectorAll('.widget-wrap iframe');
       for (const iframe of iframes) {

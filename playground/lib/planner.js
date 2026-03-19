@@ -19,6 +19,7 @@ function getPlannerPrompt() {
 }
 
 const FALLBACK_PLANNER_PROMPT = `You are a widget planner. Your job is to decompose a complex widget request into smaller sub-tasks that can each be generated independently and then assembled.`;
+const THREE_JS_RE = /<canvas[\s>]|THREE\.|three(?:\.min)?\.js|OrbitControls/i;
 
 // --- Detection ---
 
@@ -26,11 +27,53 @@ const FALLBACK_PLANNER_PROMPT = `You are a widget planner. Your job is to decomp
  * Check if streamed text contains an unclosed show-widget fence (truncated widget).
  */
 export function detectTruncation(streamedText) {
+  return analyzeTruncation(streamedText).truncated;
+}
+
+function extractJsonStringValue(text, key) {
+  const keyIdx = text.indexOf(`"${key}"`);
+  if (keyIdx === -1) return null;
+  let pos = keyIdx + key.length + 2;
+  while (pos < text.length && (text[pos] === ' ' || text[pos] === ':')) pos++;
+  if (pos >= text.length || text[pos] !== '"') return null;
+  pos++;
+  let result = '';
+  while (pos < text.length) {
+    const ch = text[pos];
+    if (ch === '\\' && pos + 1 < text.length) {
+      const next = text[pos + 1];
+      if (next === '"') { result += '"'; pos += 2; }
+      else if (next === '\\') { result += '\\'; pos += 2; }
+      else if (next === 'n') { result += '\n'; pos += 2; }
+      else if (next === 't') { result += '\t'; pos += 2; }
+      else if (next === '/') { result += '/'; pos += 2; }
+      else if (next === 'r') { result += '\r'; pos += 2; }
+      else if (next === 'u' && pos + 5 < text.length) {
+        const hex = text.slice(pos + 2, pos + 6);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          result += String.fromCharCode(parseInt(hex, 16));
+          pos += 6;
+        } else { result += ch; pos++; }
+      }
+      else { result += ch; pos++; }
+    } else if (ch === '"') {
+      break;
+    } else {
+      result += ch;
+      pos++;
+    }
+  }
+  return result || null;
+}
+
+export function analyzeTruncation(streamedText) {
   const fenceRe = /```(?:show-widget|show_widget)/gi;
   let lastFenceStart = -1;
   let m;
   while ((m = fenceRe.exec(streamedText)) !== null) lastFenceStart = m.index;
-  if (lastFenceStart === -1) return false;
+  if (lastFenceStart === -1) {
+    return { truncated: false, widgetCode: null, is3D: false };
+  }
 
   // Check if there's a valid closing fence after the last opening
   const afterFence = streamedText.slice(lastFenceStart + 3);
@@ -42,10 +85,22 @@ export function detectTruncation(streamedText) {
     const body = streamedText.slice(bodyStart, m.index).trim();
     try {
       const obj = JSON.parse(body);
-      if (obj && typeof obj.widget_code === 'string') return false; // valid close found
+      if (obj && typeof obj.widget_code === 'string') {
+        return {
+          truncated: false,
+          widgetCode: obj.widget_code,
+          is3D: THREE_JS_RE.test(obj.widget_code),
+        };
+      }
     } catch (_) { continue; }
   }
-  return true; // no valid close — truncated
+  const partialBody = nl === -1 ? '' : afterFence.slice(nl + 1);
+  const widgetCode = extractJsonStringValue(partialBody, 'widget_code');
+  return {
+    truncated: true,
+    widgetCode,
+    is3D: widgetCode ? THREE_JS_RE.test(widgetCode) : THREE_JS_RE.test(partialBody),
+  };
 }
 
 // --- Phase 1: Plan ---
@@ -82,6 +137,20 @@ Rules:
 - Each task description must be specific enough that a model can generate it independently
 `;
 
+const PROGRESSIVE_3D_PLAN_SUFFIX = `
+
+IMPORTANT: The truncated widget is a Three.js 3D scene and must be recovered in a progressive-rendering-friendly shape.
+
+Additional 3D planning rules:
+- Task 1 MUST be the 3D shell only: canvas, controls container, CDN scripts, global shared vars, init(), animate(), and the first init() call
+- The shell task must end immediately after the first \`if (window.THREE && THREE.OrbitControls) init();\`
+- Later tasks must generate scene-construction fragments that append AFTER the shell as top-level statements
+- Do NOT put the full scene assembly inside init()
+- Prefer 3-5 tasks for complex architecture/mechanical scenes: shell, terrain/base, primary structures, secondary structures/details, labels/interactions
+- Use "assembly": "merge" for 3D scenes
+- Include shared_state for global vars used across fragments (for example: scene, camera, renderer, controls, clickTargets, updateLabels)
+`;
+
 /**
  * Ask the model to decompose the request into sub-tasks.
  * @param {Function} callModel - async (messages, systemPrompt) => string
@@ -90,8 +159,11 @@ Rules:
  * @param {string} truncatedText - the truncated output from the first attempt
  * @returns {Object} plan - { summary, tasks, assembly, layout, shared_state }
  */
-export async function planTasks(callModel, systemPrompt, originalMessages, truncatedText) {
-  const planSystem = systemPrompt + PLAN_SYSTEM_SUFFIX;
+export async function planTasks(callModel, systemPrompt, originalMessages, truncatedText, options = {}) {
+  const planSystem =
+    systemPrompt +
+    PLAN_SYSTEM_SUFFIX +
+    (options.plannerMode === 'progressive3d' ? PROGRESSIVE_3D_PLAN_SUFFIX : '');
 
   // Build messages: original conversation + info about the truncation
   const messages = [
@@ -125,7 +197,25 @@ export async function planTasks(callModel, systemPrompt, originalMessages, trunc
 
 // --- Phase 2: Execute sub-tasks ---
 
-function buildSubTaskPrompt(task, plan, userRequest) {
+function buildSubTaskPrompt(task, plan, userRequest, options = {}) {
+  const taskText = `${task.id} ${task.description}`.toLowerCase();
+  const is3D = options.plannerMode === 'progressive3d';
+  const isShellTask = is3D && /(shell|bootstrap|base-scene|scene-shell)/.test(taskText);
+  const modeRules = !is3D ? '' : isShellTask ? `
+
+3D SHELL RULES:
+- Generate only the runnable shell
+- Stop immediately after the first \`if (window.THREE && THREE.OrbitControls) init();\`
+- Do NOT include heavy \`scene.add(...)\` content beyond minimal lights/camera/controls inside init()
+- Define shared globals at top level so later fragments can append to them
+` : `
+
+3D FRAGMENT RULES:
+- Generate only scene-construction code that belongs after the shell
+- Assume \`scene\`, \`camera\`, \`renderer\`, \`controls\` and shared_state globals already exist
+- Do NOT emit duplicate CDN scripts or a second init()
+- Prefer adding visible geometry early in the fragment instead of deferring all \`scene.add(...)\` calls to the very end
+`;
   return `You are generating ONE fragment of a larger widget. Here is the overall plan:
 
 Overall goal: ${plan.summary}
@@ -144,6 +234,7 @@ RULES:
 - If assembly is "merge" and shared_state is defined, reference those variables (they will exist in the assembled scope)
 - For "merge" assembly: do NOT include <style> blocks that could conflict — use inline styles or unique class prefixes (use your task id as prefix, e.g. ".${task.id}-card")
 - For "separate" assembly: you may include <style> blocks freely
+${modeRules}
 
 Original user request: "${userRequest}"`;
 }
@@ -157,8 +248,8 @@ Original user request: "${userRequest}"`;
  * @param {string} userRequest - the original user message
  * @returns {Object} { id, widget_code, fullText }
  */
-export async function executeSubTask(callModelStream, systemPrompt, task, plan, userRequest) {
-  const subTaskInstruction = buildSubTaskPrompt(task, plan, userRequest);
+export async function executeSubTask(callModelStream, systemPrompt, task, plan, userRequest, options = {}) {
+  const subTaskInstruction = buildSubTaskPrompt(task, plan, userRequest, options);
   const system = systemPrompt + '\n\n' + subTaskInstruction;
 
   const messages = [
@@ -190,48 +281,21 @@ function extractWidgetCode(text) {
   }
 
   // Try partial extraction
-  const keyIdx = text.indexOf('"widget_code"');
-  if (keyIdx === -1) return null;
-  // Use a simple extraction — find the value string
-  let pos = keyIdx + '"widget_code"'.length;
-  while (pos < text.length && (text[pos] === ' ' || text[pos] === ':')) pos++;
-  if (pos >= text.length || text[pos] !== '"') return null;
-  pos++;
-  let result = '';
-  while (pos < text.length) {
-    const ch = text[pos];
-    if (ch === '\\' && pos + 1 < text.length) {
-      const next = text[pos + 1];
-      if (next === '"') { result += '"'; pos += 2; }
-      else if (next === '\\') { result += '\\'; pos += 2; }
-      else if (next === 'n') { result += '\n'; pos += 2; }
-      else if (next === 't') { result += '\t'; pos += 2; }
-      else if (next === '/') { result += '/'; pos += 2; }
-      else if (next === 'r') { result += '\r'; pos += 2; }
-      else if (next === 'u' && pos + 5 < text.length) {
-        const hex = text.slice(pos + 2, pos + 6);
-        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
-          result += String.fromCharCode(parseInt(hex, 16));
-          pos += 6;
-        } else { result += ch; pos++; }
-      }
-      else { result += ch; pos++; }
-    } else if (ch === '"') {
-      break;
-    } else {
-      result += ch;
-      pos++;
-    }
-  }
-  return result || null;
+  return extractJsonStringValue(text, 'widget_code');
 }
 
 // --- Phase 3: Assemble ---
 
-function buildAssemblePrompt(plan, fragments) {
+function buildAssemblePrompt(plan, fragments, options = {}) {
   const fragmentList = fragments.map(f => {
     return `### Fragment: ${f.id}\n\`\`\`html\n${f.widget_code}\n\`\`\``;
   }).join('\n\n');
+  const modeRules = options.plannerMode !== 'progressive3d' ? '' : `
+- Preserve the shell fragment first, with the first \`if (window.THREE && THREE.OrbitControls) init();\` kept near the top
+- Append later 3D fragments after that shell boundary as top-level statements
+- Do NOT move scene-building code back inside init()
+- Keep visible geometry additions early in the merged scene code when possible
+`;
 
   return `You are assembling multiple widget fragments into one final widget.
 
@@ -253,7 +317,8 @@ RULES:
 - Deduplicate any shared <style> rules
 - Keep the wrapper minimal — don't re-generate the fragment content, just wrap and connect them
 - The final output must be a single show-widget code fence with valid JSON
-- Do NOT add explanatory text — output ONLY the code fence`;
+- Do NOT add explanatory text — output ONLY the code fence
+${modeRules}`;
 }
 
 /**
@@ -264,8 +329,8 @@ RULES:
  * @param {Array} fragments - [{ id, widget_code }]
  * @returns {string} assembled widget_code
  */
-export async function assembleWidgets(callModel, systemPrompt, plan, fragments) {
-  const assembleInstruction = buildAssemblePrompt(plan, fragments);
+export async function assembleWidgets(callModel, systemPrompt, plan, fragments, options = {}) {
+  const assembleInstruction = buildAssemblePrompt(plan, fragments, options);
   const system = systemPrompt + '\n\n' + assembleInstruction;
 
   const messages = [
@@ -301,7 +366,10 @@ export async function assembleWidgets(callModel, systemPrompt, plan, fragments) 
  * @returns {string} final widget content (text + widget fences) to save in session
  */
 export async function runPlanner(opts) {
-  const { callModel, callModelStream, systemPrompt, originalMessages, truncatedText, userRequest, sendEvent, log } = opts;
+  const {
+    callModel, callModelStream, systemPrompt, originalMessages,
+    truncatedText, userRequest, sendEvent, log, plannerMode = 'default',
+  } = opts;
 
   // Phase 1: Plan
   sendEvent({ planning: true });
@@ -309,7 +377,7 @@ export async function runPlanner(opts) {
 
   let plan;
   try {
-    plan = await planTasks(callModel, systemPrompt, originalMessages, truncatedText);
+    plan = await planTasks(callModel, systemPrompt, originalMessages, truncatedText, { plannerMode });
   } catch (err) {
     log('[planner] planning failed:', err.message);
     sendEvent({ planning_failed: err.message });
@@ -327,7 +395,7 @@ export async function runPlanner(opts) {
     log(`[planner] Phase 2: executing task ${i + 1}/${plan.tasks.length} — ${task.id}`);
 
     try {
-      const result = await executeSubTask(callModelStream, systemPrompt, task, plan, userRequest);
+      const result = await executeSubTask(callModelStream, systemPrompt, task, plan, userRequest, { plannerMode });
       if (result.widget_code) {
         fragments.push({ id: task.id, widget_code: result.widget_code });
         sendEvent({ subtask_done: { id: task.id, widget_code: result.widget_code } });
@@ -357,7 +425,7 @@ export async function runPlanner(opts) {
     sendEvent({ assembling: true });
     log('[planner] Phase 3: assembling fragments');
     try {
-      finalWidgetCode = await assembleWidgets(callModel, systemPrompt, plan, fragments);
+      finalWidgetCode = await assembleWidgets(callModel, systemPrompt, plan, fragments, { plannerMode });
       sendEvent({ assembled: { widget_code: finalWidgetCode } });
       log(`[planner] assembly done, final length=${finalWidgetCode.length}`);
     } catch (err) {
