@@ -6,48 +6,62 @@ metadata: { "openclaw": { "emoji": "📊", "requires": { "env": ["CHROME_CDP_URL
 
 # Generative UI Skill
 
-Enables AI agents to generate interactive UI components in conversations — charts, diagrams, calculators, data visualizations.
+Generate interactive UI components (charts, diagrams, calculators, data visualizations) using `show-widget` code fences.
 
-## Overview
+## MANDATORY: Widget Screenshot & Delivery
 
-This Skill injects a System Prompt that teaches the model to output renderable HTML/SVG widgets using `show-widget` code fences. It does not depend on any specific SDK or tool_use mechanism — any model capable of outputting markdown can use it.
+**You are NOT on a Web browser. Users cannot render HTML/SVG. Every widget you generate MUST be screenshotted and sent as a PNG image. There are ZERO exceptions.**
 
-## Setup
+### Rules
 
-Add this Skill directory to the agent's skill list. Ensure `prompts/system.md` is injected into the model's system prompt.
+1. **Always use the `show-widget` fence** — NOT `html`, `svg`, or any other fence marker
+2. **Immediately after outputting a `show-widget` fence, run the screenshot script** — NEVER skip this
+3. **Send the PNG image to the user** — NEVER send raw code, JSON, or HTML as text
+4. **If you forget to screenshot, the user sees garbled code** — this is a critical failure
 
-## Configuration
+### Workflow (execute after EVERY widget output)
 
-Choose which design guideline modules to inject based on the use case. Each module should be combined with `prompts/guidelines/core.md`.
+> `{baseDir}` is automatically replaced with this Skill's installation directory.
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `modules` | Which guideline modules to load | `["core"]` |
-| `send_message_fn` | Function name for in-widget follow-up | `window.__widgetSendMessage` |
+**Step 1** — Screenshot the widget:
 
-### Available Modules
+```
+exec: echo '<your_full_response_text>' | node {baseDir}/scripts/widget-screenshot.mjs --title "<widget_title>"
+```
 
-| Module | Guideline Files Loaded | Use Case |
-|--------|----------------------|----------|
-| `diagram` | core + color-palette + svg-setup + diagram | Flowcharts, architecture diagrams, schematics |
-| `chart` | core + ui-components + color-palette + chart | Chart.js data charts, dashboards |
-| `interactive` | core + ui-components + color-palette | Calculators, forms, interactive components |
-| `mockup` | core + ui-components + color-palette | UI prototypes, cards, layouts |
-| `art` | core + svg-setup + art | SVG illustrations, generative art |
+Output: file path to the generated PNG.
 
-## Usage
+**Step 2** — Send the image:
 
-### 1. Inject System Prompt
+```
+send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
+```
 
-Append the contents of `prompts/system.md` to the model's system prompt.
+**Step 3** (optional) — Extract drill-down buttons if the widget has `__widgetSendMessage` calls:
 
-### 2. Inject Guideline Modules as Needed
+```
+exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
+```
 
-Based on the conversation context, append the corresponding guideline files from `prompts/guidelines/` to the system prompt. Shared files (e.g. core.md) only need to be injected once.
+Then attach buttons in the send action for user follow-up.
 
-### 3. Model Outputs Widget
+### Common Mistakes
 
-The model will output widgets using code fences in its response:
+- ❌ `html` fence → user sees garbled text
+- ❌ `show-widget` fence without screenshot → user sees raw JSON + HTML
+- ❌ Sending widget_code as text → user sees code wall
+- ✅ `show-widget` fence → screenshot → send PNG
+
+### Environment
+
+- exec must use `host: gateway` to inherit `CHROME_CDP_URL`
+- Screenshot output defaults to `./imagine/` directory
+
+---
+
+## Widget Output Format
+
+Output widgets using `show-widget` code fences:
 
 ````
 Some explanatory text...
@@ -59,97 +73,28 @@ Some explanatory text...
 More explanatory text...
 ````
 
-### 4. Frontend Rendering
-
-When the frontend detects a `show-widget` fence, it extracts `widget_code` and renders it in an iframe or DOM element.
-
-## Examples
-
-- `examples/flowchart.html` — JWT auth flow (SVG flowchart)
-- `examples/chart.html` — User growth trend (Chart.js line chart + metric cards)
-- `examples/calculator.html` — Compound interest calculator (interactive sliders + real-time chart)
-- `examples/comparison.html` — REST vs GraphQL comparison (SVG side-by-side)
-
-## Technical Requirements
-
-### CDN Allowlist
-
-External resources in widgets can only be loaded from these CDNs (enforced by CSP):
+### CDN Allowlist (CSP enforced)
 
 - `cdnjs.cloudflare.com`
 - `cdn.jsdelivr.net`
 - `unpkg.com`
 - `esm.sh`
 
-### Security Constraints
+### Security
 
-- Widget code runs in a sandboxed iframe (no allow-same-origin / allow-top-navigation)
+- Widget code runs in sandboxed iframe (no allow-same-origin)
 - `connect-src 'none'` blocks fetch / XHR / WebSocket
-- Link clicks are intercepted and handled by the host application
 
-## Channel Adaptation: Widget Screenshot & Delivery (M3)
+---
 
-**CRITICAL: On Telegram, Feishu, QQ, and other non-Web channels, you MUST render widgets as PNG images before sending. NEVER send the raw show-widget fence code directly to the user — they will see garbled HTML.**
-
-### Mandatory Rules
-
-1. **You MUST use the `show-widget` fence** (NOT `html`, `svg`, or any other fence marker)
-2. **After every `show-widget` fence output, you MUST immediately run the screenshot script** — do not skip this step
-3. **Send the generated PNG image to the user**, not the raw code
-4. Web Playground and Aight App support direct widget rendering — these are the ONLY channels that do not require screenshots
-
-### Screenshot Workflow (MUST execute after every widget output)
-
-> Script paths use the `{baseDir}` placeholder, which OpenClaw automatically replaces with this Skill's installation directory.
-
-**Step 1** — Immediately after outputting a `show-widget` fence, call the screenshot script (via exec tool, host set to gateway):
-
-```
-exec: echo '<full_model_response>' | node {baseDir}/scripts/widget-screenshot.mjs --title "<widget_title>"
-```
-
-The script extracts the matching show-widget fence from the response, renders it as PNG, and outputs the file path.
-
-**Step 2** — Send the image to the current conversation via send action:
-
-```
-send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>" }
-```
-
-**Step 3** (optional) — If the widget contains drill-down buttons (`__widgetSendMessage` calls), extract the button list:
-
-```
-exec: echo '<widget_code>' | node {baseDir}/scripts/widget-drilldown.mjs
-```
-
-Then attach the buttons parameter in the send action so users can tap to follow up.
-
-### Common Mistakes (DO NOT make these)
-
-- ❌ Using `html` fence to output widget code → user sees garbled text
-- ❌ Outputting `show-widget` fence without screenshotting → user sees raw JSON + HTML
-- ❌ Sending widget_code as a text message → user sees a wall of code
-- ✅ Correct: `show-widget` fence → screenshot → send PNG image
-
-### Environment Requirements
-
-- The exec tool must use `host: gateway` (or `node`) to inherit host environment variables (e.g. `CHROME_CDP_URL`)
-- If using an existing Chrome instance on the VPS, set the environment variable: `CHROME_CDP_URL=http://localhost:9222`
-- If `CHROME_CDP_URL` is not set, the script will attempt to launch headless Chromium (requires Playwright + Chromium installed)
-
-### Script Parameters
+## Script Parameters
 
 | Script | Parameter | Description |
 |--------|-----------|-------------|
-| `widget-screenshot.mjs` | `--title <name>` | Extract widget by title from stdin model output and screenshot it |
-| | `--file <path>` | Screenshot a raw HTML file directly |
-| | `--output <path>` | Specify output PNG path (defaults to `./imagine/`) |
-| | `--theme light\|dark` | Screenshot theme (default: light) |
+| `widget-screenshot.mjs` | `--title <name>` | Extract widget by title from stdin and screenshot |
+| | `--file <path>` | Screenshot a raw HTML file |
+| | `--output <path>` | Output PNG path (default: `./imagine/`) |
+| | `--theme light\|dark` | Theme (default: light) |
 | | `--width <px>` | Viewport width (default: 680) |
 | `widget-drilldown.mjs` | `--code <html>` | Extract drill-down buttons from widget_code |
-| | `--file <path>` | Extract from a file |
-
-## Related Projects
-
-- Rendering runtime (`@generative-ui/renderer`) — see M2 milestone
-- Original references: [CodePilot](https://github.com/op7418/CodePilot) / [pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui)
+| | `--file <path>` | Extract from file |
