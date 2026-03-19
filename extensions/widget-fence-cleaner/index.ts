@@ -28,14 +28,11 @@ export default definePluginEntry({
   id: "widget-fence-cleaner",
   name: "Widget Fence Cleaner",
   description: "Replaces show-widget fences with placeholder text before sending",
-  plugin: {
-    register(api) {
-      api.on("message_sending", async (event) => {
-        if (!FENCE_RE.test(event.content)) return;
-        // Reset regex lastIndex after test()
-        FENCE_RE.lastIndex = 0;
-        return { content: cleanFences(event.content) };
-      });
-    },
+  register(api) {
+    api.on("message_sending", (event) => {
+      if (!FENCE_RE.test(event.content)) return;
+      FENCE_RE.lastIndex = 0;
+      return { content: cleanFences(event.content) };
+    });
   },
 });

@@ -1,7 +1,7 @@
 {
   "name": "@generative-ui/widget-fence-cleaner",
   "version": "0.1.0",
-  "description": "OpenClaw plugin hook: replaces show-widget fences with placeholder text before message delivery",
+  "description": "OpenClaw plugin: replaces show-widget fences with placeholder text before message delivery",
   "type": "module",
   "openclaw": {
     "extensions": ["./index.ts"],
