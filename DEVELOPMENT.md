@@ -9,10 +9,9 @@
 ```
 M0 技术分析 + 项目规划               ✅ 完成
 M1 产物 A：Prompt Skill             ✅ 完成
-M2 产物 B：渲染运行时 JS 库          ✅ 核心完成（M2a+M2b+M2c），待 npm 发布
+M2 产物 B：渲染运行时 JS 库          ✅ 完成（M2a+M2b+M2c + npm 发布）
 M3a 渠道适配脚本                     ✅ 完成（截图 + drill-down + 围栏清洗 Plugin Hook）
-M3b Telegram / 飞书联调              ✅ 基本调通
-M3c Aight WKWebView 集成             待开始
+M3b Telegram / 飞书 / QQ 联调        ✅ 完成
 ```
 
 依赖关系：M1 独立可交付 → M2 依赖 M1 的 prompt 格式定义 → M3 依赖 M2 的渲染库。
@@ -134,7 +133,7 @@ Claude 原生用 `show_widget` tool call，但我们选择代码围栏：
 
 ### 目标
 
-从 playground 验证过的渲染逻辑中提取核心模块，做成框架无关的 JS 库 `@generative-ui/renderer`。任何前端引入后就能渲染 show-widget 围栏内的 HTML/SVG。
+从 playground 验证过的渲染逻辑中提取核心模块，做成框架无关的 JS 库 `generative-ui-renderer`。任何前端引入后就能渲染 show-widget 围栏内的 HTML/SVG。
 
 > **参考实现**：`playground/public/app.js` 是 M1 期间迭代出的原型，已验证完整的流式围栏检测 → 增量渲染 → sandbox iframe 流水线。M2 在此基础上重构为可复用库。
 
@@ -169,7 +168,7 @@ Token 流入
 
 ```
 packages/renderer/
-├── package.json                    # @generative-ui/renderer
+├── package.json                    # generative-ui-renderer
 ├── tsconfig.json
 ├── src/
 │   ├── index.ts                    # 统一导出
@@ -201,9 +200,9 @@ packages/renderer/
 - `isShowWidgetFence(firstLine)` — 大小写不敏感判断围栏类型（兼容 `show-widget` / `show_widget`）
 - `extractPartialWidgetCode(partialBody)` — 从未完成的 JSON 中提取部分 widget_code，处理 JSON 转义（`\"` → `"`, `\n` → 换行等）
 
-待补充：
-- 截断未闭合的 `<script>` 标签（避免流式预览中脚本代码泄露为可见文本）
-- 正式状态机封装（TEXT → FENCE_OPEN → WIDGET_CODE → FENCE_CLOSE）
+待补充（已完成 ✅）：
+- ✅ 截断未闭合的 `<script>` 标签（M2a `stripUnclosedScript()` 已实现）
+- ✅ 正式状态机封装（M2a `StreamParser` class 已实现）
 
 参考实现：`playground/public/app.js` parseShowWidgetFence / extractPartialWidgetCode
 
@@ -251,9 +250,9 @@ packages/renderer/
 - 对比度修复脚本 `fixContrast()` — 自动检测深色填充的 SVG 形状，将内部文字改白色
 - 高度自适应 `reportHeight()` — load + MutationObserver + 多次延迟上报，上限 800px
 
-待补充：
-- `widget:theme` 主题同步（postMessage 通知 iframe 切换深色/浅色）
-- `widget:ready` 握手（iframe 就绪信号，避免竞态）
+待补充（已完成 ✅）：
+- ✅ `widget:theme` 主题同步（M2b `widgetTheme` postMessage 已实现）
+- ✅ `widget:ready` 握手（M2b `widgetReady` postMessage 已实现）
 
 参考实现：`playground/public/app.js` buildWidgetDoc + message listener
 
@@ -305,7 +304,7 @@ SVG 预置 class（playground 已验证，9 色阶完整实现）：
 ### API 设计
 
 ```typescript
-import { WidgetRenderer } from '@generative-ui/renderer';
+import { WidgetRenderer } from 'generative-ui-renderer';
 
 const renderer = new WidgetRenderer({
   container: document.getElementById('chat'),
@@ -352,7 +351,7 @@ renderer.parseAndRender(fullModelOutput);
 | 滚动回跳 | streaming→final 切换导致高度突变 | 预览→iframe 切换时保持 min-height 平滑过渡 | ✅ M2b renderer 统一 min-height: 300px + transition |
 | Script 代码泄露 | 未闭合 `<script>` 标签内容可见 | 流式预览阶段截断未闭合 script | ✅ M2a `stripUnclosedScript()` 已实现 |
 | iframe Ready 竞态 | 消息早于 iframe 加载完成 | iframe onLoad 回调兜底 + ready 握手 | ✅ M2b `widgetReady` postMessage 已实现 |
-| 主题同步 | iframe 内无法响应宿主深色/浅色切换 | postMessage `widget:theme` 通知 iframe 重新注入 CSS 变量 | ⏳ 延后 — M2c 或 M3 按需实现 |
+| 主题同步 | iframe 内无法响应宿主深色/浅色切换 | postMessage `widget:theme` 通知 iframe 重新注入 CSS 变量 | ✅ 已完成 |
 
 ### 实施分期
 
@@ -360,7 +359,7 @@ renderer.parseAndRender(fullModelOutput);
 
 **Step 0: 包初始化**
 - 创建 `packages/renderer/` 目录结构
-- `package.json`（name: `@generative-ui/renderer`, type: module, exports 配置）
+- `package.json`（name: `generative-ui-renderer`, type: module, exports 配置）
 - `tsconfig.json`（target: ES2020, module: ESNext, strict, declaration）
 - 构建工具：tsup（零配置打包，输出 ESM + CJS + .d.ts）
 - 测试工具：vitest（兼容 Node.js 内置 test 风格，支持 TypeScript）
@@ -446,9 +445,9 @@ renderer.parseAndRender(fullModelOutput);
 #### M2c — 质量 + 发布
 
 - ✅ 全量回归测试（renderer 86 tests + playground 152 tests 全部通过）
-- ✅ playground 迁移到使用 `@generative-ui/renderer`（替换 buildWidgetDoc + 新增 sanitization + streaming styles 动态注入）
+- ✅ playground 迁移到使用 `generative-ui-renderer`（替换 buildWidgetDoc + 新增 sanitization + streaming styles 动态注入）
 - ✅ 迁移后回归测试
-- npm 发布（待 guideline 模块变更完成后执行）
+- ✅ npm 发布
 
 ---
 
@@ -471,14 +470,12 @@ renderer.parseAndRender(fullModelOutput);
 
 | 策略 | 适用渠道 | 方式 |
 |------|---------|------|
-| A 满血渲染 | Aight (WKWebView)、Web (iframe) | `@generative-ui/renderer` 完整流水线 |
+| A 满血渲染 | Web (iframe) | `generative-ui-renderer` 完整流水线 |
 | B 静态图片 + 轻交互 | 飞书、Telegram、QQ | headless 渲染 PNG + 原生按钮 |
-| C 富文本卡片 | 飞书 | 结构化 widget → Message Card JSON |
-| D H5 跳转 | 飞书、Telegram、QQ | widget 存储到临时 URL，内置浏览器打开 |
 
 ### 依赖
 
-- 产物 B（`@generative-ui/renderer`）已发布 npm
+- 产物 B（`generative-ui-renderer`）已发布 npm
 - OpenClaw Agent Runtime 消息投递流水线支持中间件扩展
 - 各渠道 Bot API 接入（飞书 / Telegram / QQ）
 
@@ -487,7 +484,6 @@ renderer.parseAndRender(fullModelOutput);
 - Widget Interceptor — 检测并提取 show-widget 围栏（复用 M2 stream-parser）
 - Channel Router — 按渠道能力 + widget 类型选择渲染策略
 - Screenshot Service — headless browser 渲染 widget 为 PNG（复用 M2 buildWidgetDoc）
-- Widget Hosting — 临时存储 widget HTML，生成短链供 H5 跳转
 - Drill-down Extractor — 提取 `__widgetSendMessage` 调用，映射为各渠道原生按钮
 
 开发计划：[`architecture/m3-development-plan.md`](architecture/m3-development-plan.md)

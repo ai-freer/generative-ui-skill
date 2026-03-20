@@ -2,7 +2,7 @@
  * Widget Interceptor — M3a S1
  *
  * Detects and extracts show-widget fences from model output.
- * Reuses parseShowWidgetFence from @generative-ui/renderer.
+ * Reuses parseShowWidgetFence from generative-ui-renderer.
  *
  * Usage:
  *   node scripts/widget-interceptor.mjs [--input <text>] [--file <path>]

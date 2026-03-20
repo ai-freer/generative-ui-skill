@@ -146,4 +146,3 @@ echo '<rect onclick="window.__widgetSendMessage('"'"'详细介绍'"'"')" />' | n
 - [x] Step 6 Telegram 端到端通过
 - [x] S4b message_sending Plugin Hook（widget-fence-cleaner）
 - [x] 飞书截图 + PNG 发送调通
-- [ ] M3c Aight WKWebView 集成

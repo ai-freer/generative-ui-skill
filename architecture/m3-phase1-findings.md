@@ -193,7 +193,7 @@ Telegram 的 `send` action 支持：
 3. **修改 `SKILL.md`**，追加截图和发送指令
 4. **截图脚本**保持不变（`widget-screenshot.mjs`）
 
-### M3b+ 飞书调整
+### M3b 飞书调整
 
 飞书的能力比预期更强：
 - 自动卡片渲染已内置（代码块/表格 → Markdown 卡片）
@@ -209,9 +209,7 @@ Telegram 的 `send` action 支持：
 
 ```
 M3a  截图脚本 + SKILL.md 修改 + 可选 Plugin Hook
-M3b  Telegram 联调
-M3b+ 飞书适配
-M3c  Aight WKWebView 集成
+M3b  Telegram / 飞书联调
 ```
 
 ---

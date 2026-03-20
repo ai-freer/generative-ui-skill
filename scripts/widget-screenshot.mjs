@@ -1,7 +1,7 @@
 /**
  * Widget Screenshot Service — M3a S2
  *
- * Renders widget_code to PNG using Playwright + buildWidgetDoc from @generative-ui/renderer.
+ * Renders widget_code to PNG using Playwright + buildWidgetDoc from generative-ui-renderer.
  *
  * Usage (CLI — called by OpenClaw agent via exec):
  *   node scripts/widget-screenshot.mjs --title "jwt_flow" [--theme light] [--width 680] [--wait 3000]

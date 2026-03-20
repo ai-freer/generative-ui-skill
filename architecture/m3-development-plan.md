@@ -36,8 +36,8 @@
 
 | 条件 | 状态 |
 |------|------|
-| M2 `@generative-ui/renderer` 核心完成 | ✅ |
-| `@generative-ui/renderer` 发布 npm | ⬜ 待发布 |
+| M2 `generative-ui-renderer` 核心完成 | ✅ |
+| `generative-ui-renderer` 发布 npm | ✅ 已发布 |
 | OpenClaw Gateway 部署在 VPS 上 | ✅ |
 | OpenClaw 支持 `sendAttachment` channel action | ✅ 已有 |
 | OpenClaw 支持 Hook 系统（message:sent 事件） | ✅ 已有 |
@@ -48,11 +48,8 @@
 ## 整体分期
 
 ```
-M3a  Widget Screenshot Skill（Node.js 脚本）     ← 核心：截图 + 投递
-M3b  Telegram 联调验证                            ← 在 VPS 上的 OpenClaw 实例验证
-M3b+ 飞书卡片适配                                 ← 结构化 widget → Message Card，视觉型 → 图片卡片
-M3c  Aight Adapter                               ← 满血渠道，WKWebView 集成
-M3d  其他渠道（QQ 等）                             ← 按需扩展
+M3a  Widget Screenshot Skill（Node.js 脚本）     ✅ 完成
+M3b  Telegram / 飞书 / QQ 联调验证               ✅ 完成
 ```
 
 ---
@@ -112,10 +109,10 @@ Agent 输出 show-widget 围栏
 
 实现位置：`scripts/widget-interceptor.mjs`（generative-ui 项目内）
 
-直接复用 M2 的 `@generative-ui/renderer` 中的 `parseShowWidgetFence()`：
+直接复用 M2 的 `generative-ui-renderer` 中的 `parseShowWidgetFence()`：
 
 ```javascript
-import { parseShowWidgetFence } from '@generative-ui/renderer';
+import { parseShowWidgetFence } from 'generative-ui-renderer';
 
 /**
  * 从模型输出中检测并提取 show-widget 围栏。
@@ -159,7 +156,7 @@ export function interceptWidgets(modelOutput) {
 
 ```javascript
 import { chromium } from 'playwright';
-import { buildWidgetDoc } from '@generative-ui/renderer';
+import { buildWidgetDoc } from 'generative-ui-renderer';
 
 let browser = null;
 
@@ -239,7 +236,7 @@ export function extractDrillDowns(widgetCode) {
 在现有 `SKILL.md` 中追加一段，教 agent 在非满血渠道（Telegram/飞书等）输出 widget 后主动截图并发送：
 
 ```markdown
-## Widget 截图与投递（非 Web/Aight 渠道）
+## Widget 截图与投递（非 Web 渠道）
 
 当你在 Telegram、飞书等渠道输出 `show-widget` 围栏后，必须执行以下步骤将 widget 渲染为图片并发送给用户：
 
@@ -256,7 +253,7 @@ export function extractDrillDowns(widgetCode) {
 
 3. 如果 widget 包含 drill-down 按钮，在 send action 中附加 buttons 参数。
 
-注意：在 Web Playground 和 Aight App 中不需要执行此步骤，这些渠道支持直接渲染 widget。
+注意：在 Web Playground 中不需要执行此步骤，该渠道支持直接渲染 widget。
 ```
 
 #### S4b：可选 message_sending Plugin Hook（围栏清洗）
@@ -354,293 +351,6 @@ node scripts/test-interceptor.mjs --input "模型输出文本（含 show-widget 
 
 ---
 
-## M3b+：飞书卡片适配
-
-飞书比 Telegram 强一档——交互卡片（Message Card）支持多栏布局、按钮回调、Markdown 渲染。对于结构化 widget，飞书卡片能提供接近原生的体验，不需要降级到图片。
-
-### 飞书渠道的三层策略
-
-| Widget 类型 | 策略 | 实现 |
-|------------|------|------|
-| 结构化（指标卡片、对比表格、列表） | 策略 C：飞书 Message Card | 解析 widget 结构 → 映射为卡片 JSON |
-| 视觉型（SVG 流程图、Chart.js 图表、插画） | 策略 B：截图 | 复用 M3a Screenshot Service → 图片卡片 |
-| 交互型（计算器、可操作图表） | 策略 D：H5 跳转 | widget 存储到临时 URL → 卡片内嵌"打开交互版"按钮 |
-
-### S4b：飞书 Message Card 映射器
-
-```javascript
-/**
- * 尝试将 widget_code 映射为飞书 Message Card JSON。
- * 返回 null 表示无法映射，应回退到截图策略。
- */
-export function widgetToFeishuCard(widget) {
-  const { title, widgetCode } = widget;
-
-  // 检测 widget 类型
-  if (isSvgWidget(widgetCode) || isChartWidget(widgetCode)) {
-    return null; // 视觉型 → 回退截图
-  }
-
-  // 尝试提取结构化内容
-  const metrics = extractMetricCards(widgetCode);
-  const tables = extractTables(widgetCode);
-  const lists = extractLists(widgetCode);
-
-  if (!metrics.length && !tables.length && !lists.length) {
-    return null; // 无法识别结构 → 回退截图
-  }
-
-  // 构建飞书卡片 JSON
-  const elements = [];
-
-  // 标题
-  elements.push({
-    tag: 'markdown',
-    content: `**${title}**`,
-  });
-
-  // 指标卡片 → column_set
-  if (metrics.length) {
-    elements.push({
-      tag: 'column_set',
-      columns: metrics.map(m => ({
-        tag: 'column',
-        width: 'weighted',
-        weight: 1,
-        elements: [
-          { tag: 'markdown', content: `**${m.label}**\n${m.value}` },
-        ],
-      })),
-    });
-  }
-
-  // 表格 → markdown table
-  if (tables.length) {
-    for (const table of tables) {
-      elements.push({
-        tag: 'markdown',
-        content: tableToMarkdown(table),
-      });
-    }
-  }
-
-  // 列表 → markdown list
-  if (lists.length) {
-    for (const list of lists) {
-      elements.push({
-        tag: 'markdown',
-        content: list.items.map(item => `• ${item}`).join('\n'),
-      });
-    }
-  }
-
-  // Drill-down 按钮 → action buttons
-  const drillDowns = extractDrillDowns(widgetCode);
-  if (drillDowns.length) {
-    elements.push({
-      tag: 'action',
-      actions: drillDowns.slice(0, 5).map(dd => ({
-        tag: 'button',
-        text: { tag: 'plain_text', content: dd.label },
-        type: 'primary',
-        value: { action: 'drill_down', query: dd.query },
-      })),
-    });
-  }
-
-  return {
-    config: { wide_screen_mode: true },
-    elements,
-  };
-}
-```
-
-### S4c：飞书 Hook 集成
-
-### S4c：飞书适配（Phase 1 调研更新）
-
-> Phase 1 调研确认：OpenClaw 已有完整的飞书 channel plugin（`extensions/feishu/`），能力比预期更强。
-
-飞书 outbound adapter 已内置的能力：
-- **自动卡片渲染**：文本包含代码块或表格时，自动切换为 Markdown 卡片（`sendStructuredCardFeishu`）
-- **本地图片路径自动上传**：outbound adapter 检测到本地图片路径时，自动调用 `sendMediaFeishu` 上传
-- **卡片按钮回调**：`card-interaction.ts` 有完整的 `FeishuCardInteractionEnvelope` 解码/验证/路由机制
-
-这意味着飞书适配的工作量比原计划小：
-
-| Widget 类型 | 实现方式 | 复杂度 |
-|------------|---------|--------|
-| 视觉型（SVG/Chart.js） | 截图 PNG → Agent 调用 send（media 传本地路径，飞书自动上传） | 低（复用 S2） |
-| 结构化（指标卡片/表格） | 截图 PNG 为主；或利用飞书自动 Markdown 卡片渲染 | 低 |
-| 交互型（计算器等） | 策略 D：widget 存储到临时 URL → 卡片内嵌"打开交互版"按钮 | 中（需 widget hosting） |
-
-Agent 在飞书渠道的截图+发送流程与 Telegram 一致（路径 B+），飞书 outbound adapter 会自动处理图片上传和卡片渲染。
-
-### S4d：飞书按钮回调处理
-
-飞书卡片按钮回调已有完整机制（`card-interaction.ts`）：
-
-```typescript
-// FeishuCardInteractionEnvelope 结构
-{
-  oc: "ocf1",           // 版本标识
-  k: "button",          // 交互类型：button | quick | meta
-  a: "drill_down",      // action 名称
-  q: "详细介绍 JWT 签名过程",  // query 文本
-  c: {                  // 上下文
-    u: "user_open_id",
-    h: "chat_id",
-    t: "p2p" | "group"
-  }
-}
-```
-
-Drill-down 按钮的实现思路：
-- 截图脚本提取 `__widgetSendMessage` 调用 → 生成按钮列表
-- Agent 在 send action 中附加 buttons 参数，value 使用 `FeishuCardInteractionEnvelope` 格式
-- 用户点击按钮 → 飞书 card action 回调 → OpenClaw 飞书 plugin 解码 → 转为用户消息 → Agent 处理追问
-
-### 飞书适配的调研清单（已完成 ✅）
-
-| 问题 | 结论 |
-|------|------|
-| OpenClaw 是否有飞书 channel plugin？ | ✅ `extensions/feishu/`，功能完整 |
-| 飞书是否支持 sendCard / Message Card？ | ✅ `sendStructuredCardFeishu`、`sendMarkdownCardFeishu` |
-| 飞书图片上传？ | ✅ outbound adapter 自动处理本地路径上传 |
-| 飞书卡片按钮回调？ | ✅ `card-interaction.ts` 有完整的解码/路由机制 |
-
----
-
-## M3c：Aight Adapter
-
-Aight 是满血渠道（WKWebView），不需要截图降级。直接使用 M2 的 `@generative-ui/renderer`。
-
-### S5：Aight 壳页面
-
-创建一个本地 HTML 文件，作为 WKWebView 加载的壳页面：
-
-```
-packages/renderer/aight/
-  └── widget-shell.html    ← WKWebView 加载这个文件
-```
-
-`widget-shell.html` 的职责：
-- 引入 `@generative-ui/renderer` 的 dist JS
-- 暴露全局函数供 Swift 调用：
-  - `window.guFeed(accumulatedText)` — 流式喂入
-  - `window.guFlush()` — 流结束
-  - `window.guRender(fullOutput)` — 非流式渲染
-  - `window.guSetTheme(isDark)` — 主题切换
-- 监听 renderer 的回调，通过 `webkit.messageHandlers` 桥接到 Swift：
-  - `onSendMessage` → `webkit.messageHandlers.widgetSendMessage.postMessage(text)`
-  - `onResize` → `webkit.messageHandlers.widgetResize.postMessage(height)`
-  - `onReady` → `webkit.messageHandlers.widgetReady.postMessage({})`
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <script src="./renderer.js"></script>
-</head>
-<body>
-  <div id="container"></div>
-  <script>
-    const renderer = new GenerativeUI.WidgetRenderer({
-      container: document.getElementById('container'),
-      theme: 'auto',
-      onSendMessage: (text) => {
-        webkit.messageHandlers.widgetSendMessage.postMessage(text);
-      },
-      onResize: (height) => {
-        webkit.messageHandlers.widgetResize.postMessage({ height });
-      },
-      onReady: () => {
-        webkit.messageHandlers.widgetReady.postMessage({});
-      },
-    });
-
-    window.guFeed = (text) => renderer.feed(text);
-    window.guFlush = () => renderer.flush();
-    window.guRender = (text) => renderer.parseAndRender(text);
-    window.guSetTheme = (isDark) => {
-      document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    };
-  </script>
-</body>
-</html>
-```
-
-### S6：Swift 集成指南
-
-给 Aight iOS 开发者的接口文档：
-
-```swift
-// 1. 创建 WKWebView，注册 message handlers
-let config = WKWebViewConfiguration()
-let controller = WKUserContentController()
-controller.add(self, name: "widgetSendMessage")
-controller.add(self, name: "widgetResize")
-controller.add(self, name: "widgetReady")
-config.userContentController = controller
-
-let webView = WKWebView(frame: .zero, configuration: config)
-
-// 2. 加载壳页面
-let shellURL = Bundle.main.url(forResource: "widget-shell", withExtension: "html")!
-webView.loadFileURL(shellURL, allowingReadAccessTo: shellURL.deletingLastPathComponent())
-
-// 3. 流式喂入（每收到一个 SSE chunk）
-webView.evaluateJavaScript("window.guFeed('\(escapedText)')")
-
-// 4. 流结束
-webView.evaluateJavaScript("window.guFlush()")
-
-// 5. 非流式渲染（历史消息）
-webView.evaluateJavaScript("window.guRender('\(escapedFullOutput)')")
-
-// 6. 主题切换
-webView.evaluateJavaScript("window.guSetTheme(\(isDark))")
-```
-
-Message handler 处理：
-
-```swift
-func userContentController(_ controller: WKUserContentController,
-                           didReceive message: WKScriptMessage) {
-    switch message.name {
-    case "widgetSendMessage":
-        if let text = message.body as? String {
-            delegate?.widgetDidRequestMessage(text)
-        }
-    case "widgetResize":
-        if let dict = message.body as? [String: Any],
-           let height = dict["height"] as? CGFloat {
-            delegate?.widgetDidResize(height: height)
-        }
-    case "widgetReady":
-        delegate?.widgetDidBecomeReady()
-    default:
-        break
-    }
-}
-```
-
-### S7：Aight 联调测试
-
-| # | 场景 | 验证点 |
-|---|------|--------|
-| 1 | 流式渲染 | 发送"解释 JWT"，观察 widget 逐步"长出来" |
-| 2 | 非流式渲染 | 切换到历史会话，widget 正确渲染 |
-| 3 | Drill-down | 点击 widget 内按钮，触发追问 |
-| 4 | 高度自适应 | widget 高度正确，不截断不留白 |
-| 5 | 深色模式 | 切换系统深色模式，widget 主题同步 |
-| 6 | 多个 widget | 一条消息包含多个 widget，全部正确渲染 |
-| 7 | CDN 资源 | Chart.js widget 正确加载 CDN 脚本 |
-
----
-
 ## 开发顺序
 
 ```
@@ -665,16 +375,6 @@ Phase 3 — M3b Telegram / 飞书联调（已完成 ✅ 基本调通）
   飞书截图 + 发送 PNG 验证通过
   SKILL.md 多轮迭代优化（指令遵循、按钮格式）
   已知限制：模型 Skill 指令遵循能力要求较高，弱模型可能跳过截图步骤
-
-Phase 4 — M3b+ 飞书增强（待定）
-  飞书 Markdown 卡片（结构化 widget）
-  飞书按钮回调 → drill-down
-  视需求决定是否推进
-
-Phase 5 — M3c Aight（待开始，需 iOS 配合）
-  S5 壳页面
-  S6 Swift 集成
-  S7 联调测试
 ```
 
 ---
@@ -705,12 +405,3 @@ OpenClaw 的 `exec` 工具可能在 Docker sandbox 中运行脚本。`Dockerfile
 Playwright 截图需要 1-3 秒。在 Telegram 中，用户会先看到文字回复（围栏已被清洗为纯文本摘要），然后 1-3 秒后收到图片。
 
 → **缓解**：保持 browser 实例常驻，避免每次冷启动。首次截图慢，后续复用 browser context。
-
-### 5. Aight 的 JS 资源打包
-
-WKWebView 加载本地 HTML 时，`@generative-ui/renderer` 的 dist JS 需要打包进 Aight 的 app bundle。需要确定：
-- 直接 copy `dist/index.js` 到 Xcode 项目？
-- 通过 CocoaPods/SPM 自动管理？
-- 版本更新时如何同步？
-
-→ **行动**：与 iOS 开发者确认最佳实践。

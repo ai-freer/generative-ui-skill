@@ -1,5 +1,5 @@
 {
-  "name": "@generative-ui/renderer",
+  "name": "generative-ui-renderer",
   "version": "0.1.0",
   "description": "Framework-agnostic renderer for generative UI show-widget fences",
   "type": "module",

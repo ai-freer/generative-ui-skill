@@ -2,9 +2,11 @@
 
 [English](./README.md) | [中文](./README_CN.md)
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[License](https://opensource.org/licenses/Apache-2.0)
 
 Make any chatbot response carry interactive UI components such as charts, architecture diagrams, calculators, and data visualizations. No frontend refactor is required. Any model that can output Markdown can drive it.
+
+> **Project Status:** All planned milestones (M0–M3) are complete. The rendering runtime [`generative-ui-renderer`](https://www.npmjs.com/package/generative-ui-renderer) is published on npm. Channel adaptation (Telegram, Feishu, QQ) is operational. This project is in maintenance mode — no active feature development is planned at this time.
 
 ## Acknowledgements
 
@@ -25,8 +27,9 @@ The goal of this project is to abstract that capability into a **general-purpose
 
 ## Current Release Status
 
-- `main` contains the full **M1 + M2 + M3a** deliverables. The Web Playground is ready to use, and channel adaptation scripts (screenshot + drill-down button extraction) are in place.
-- **Telegram / Feishu channel adaptation** is operational: widgets are screenshotted as PNG images, and drill-down interactions are mapped to native channel buttons.
+- `main` contains the full **M1 + M2 + M3** deliverables. The Web Playground is ready to use, and channel adaptation scripts (screenshot + drill-down button extraction) are in place.
+- **Telegram / Feishu / QQ channel adaptation** is operational: widgets are screenshotted as PNG images, and drill-down interactions are mapped to native channel buttons.
+- **`generative-ui-renderer`** is published on npm.
 - **Plugin Hook** (`widget-fence-cleaner`) is available as an optional install to auto-clean widget fences from outgoing messages.
 
 ### Channel Adaptation Caveats
@@ -65,7 +68,7 @@ The solution is split into three layers: **Prompt Skill -> Rendering Runtime -> 
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │              ② Rendering Runtime (M2)                   │
-│              @generative-ui/renderer                    │
+│              generative-ui-renderer                    │
 │                                                         │
 │  Streaming fence detection -> HTML sanitization ->      │
 │  CSS variable bridging -> rendering                     │
@@ -79,9 +82,8 @@ The solution is split into three layers: **Prompt Skill -> Rendering Runtime -> 
 │                                                         │
 │  Rendering strategy is chosen based on channel          │
 │  capabilities:                                          │
-│  Web / App -> full rendering pipeline                   │
-│  Feishu / Telegram / WeChat -> image + button /         │
-│  rich text card / H5                                    │
+│  Web -> full rendering pipeline                         │
+│  Feishu / Telegram / QQ -> image + buttons          │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -97,24 +99,26 @@ Key design choices:
 
 ### Prompt Skill
 
-The system-prompt injection layer is the foundation of the whole approach. Once enabled, the model knows how to output valid HTML/SVG widgets inside ` ```show-widget ` code fences.
+The system-prompt injection layer is the foundation of the whole approach. Once enabled, the model knows how to output valid HTML/SVG widgets inside ````show-widget` code fences.
 
 Six design-guide modules are built in and can be freely combined:
 
-| Module | Typical Scenarios |
-|------|---------|
-| **core** | Structured text explanation: concepts, rules, methods, and bullet summaries |
-| **diagram** | Relationships, structures, and flow diagrams such as architecture diagrams, sequence diagrams, and user journeys |
-| **chart** | Data charts for trends, comparisons, distributions, and composition |
-| **interactive** | Interactive content such as clickable, draggable, or parameter-adjustable demos, simulators, and tools |
-| **mockup** | Interfaces, prototypes, and high-fidelity page compositions |
-| **art** | Stylized visuals such as illustrations, posters, mood boards, and world-building scenes |
+
+| Module          | Typical Scenarios                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **core**        | Structured text explanation: concepts, rules, methods, and bullet summaries                                      |
+| **diagram**     | Relationships, structures, and flow diagrams such as architecture diagrams, sequence diagrams, and user journeys |
+| **chart**       | Data charts for trends, comparisons, distributions, and composition                                              |
+| **interactive** | Interactive content such as clickable, draggable, or parameter-adjustable demos, simulators, and tools           |
+| **mockup**      | Interfaces, prototypes, and high-fidelity page compositions                                                      |
+| **art**         | Stylized visuals such as illustrations, posters, mood boards, and world-building scenes                          |
+
 
 Every topic includes at least `core`, then layers on additional perspectives. A single topic can combine 2 to 4 modules to make the output more multidimensional.
 
 ### Rendering Runtime
 
-`@generative-ui/renderer` is a framework-agnostic JavaScript library currently in M2 development. Once included in a frontend app, it can render the HTML/SVG contained in show-widget fences. Core capabilities include:
+`generative-ui-renderer` is a framework-agnostic JavaScript library currently in M2 development. Once included in a frontend app, it can render the HTML/SVG contained in show-widget fences. Core capabilities include:
 
 - Streaming fence detection plus partial JSON extraction
 - Two-stage HTML sanitization: strip dangerous tags during streaming, then preserve scripts for execution inside the sandbox at the final stage
@@ -170,25 +174,25 @@ If you want to share it inside your own team, the recommended path is to deploy 
 
 ## Channel Adaptation and Usage
 
-Different message containers have very different rendering capabilities. The project defines four rendering strategies and chooses among them based on what the target channel supports:
+Different message containers have very different rendering capabilities. The project defines two rendering strategies and chooses among them based on what the target channel supports:
 
 This section is meant for both end users and developers building channel integrations.
 
 If you want to install this project into channels managed by OpenClaw, or you need the OpenClaw-side setup flow, plugin installation steps, and pre-run requirements, read [INSTALL.md](./INSTALL.md) first. It contains the dedicated OpenClaw installation and configuration instructions.
 
-| Strategy | Applicable Channels | Method |
-|------|---------|------|
-| Full rendering | Web (iframe), App (WKWebView) | Complete `@generative-ui/renderer` pipeline with streaming preview and JavaScript interaction |
-| Static image + buttons | Feishu, Telegram, WeChat | Render the widget headlessly to PNG and map drill-down actions to native buttons |
-| Rich text card | Feishu | Map widget structure into Feishu Message Card JSON |
-| H5 redirect | Feishu, Telegram, WeChat | Store the widget at a temporary URL and open it in the built-in browser |
+
+| Strategy               | Applicable Channels  | Method                                                                                        |
+| ---------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| Full rendering         | Web (iframe)         | Complete `generative-ui-renderer` pipeline with streaming preview and JavaScript interaction |
+| Static image + buttons | Feishu, Telegram, QQ | Render the widget headlessly to PNG and map drill-down actions to native buttons              |
+
 
 ### Web Integration
 
 If you already have a web application, you can integrate the rendering runtime directly:
 
 ```html
-<script src="@generative-ui/renderer"></script>
+<script src="generative-ui-renderer"></script>
 <widget-renderer stream="..."></widget-renderer>
 ```
 
@@ -196,11 +200,11 @@ Or you can use `playground/` as a reference and embed the streaming-rendering lo
 
 ### Build a Custom Channel Adapter
 
-If you need to integrate Feishu, Telegram, WeChat, or other channels, refer to the architecture design in `architecture/m3-channel-adapters.md` and implement your own channel adapter. Each adapter only needs to:
+If you need to integrate Feishu, Telegram, QQ, or other channels, refer to the architecture design in `architecture/m3-channel-adapters.md` and implement your own channel adapter. Each adapter only needs to:
 
 1. Receive `{ title, widget_code }` parsed by the Widget Interceptor
 2. Select a rendering strategy based on channel capabilities
-3. Call the corresponding rendering service such as the renderer, screenshot service, card builder, or hosting layer
+3. Call the corresponding rendering service such as the renderer or screenshot service
 4. Deliver the final result through the channel API
 
 Adding a new channel only requires adding a new adapter. It does not affect the upstream skill or renderer.
@@ -209,17 +213,19 @@ Adding a new channel only requires adding a new adapter. It does not affect the 
 
 ## Model Compatibility
 
-| Model | Status | Notes |
-|------|---------|------|
-| Claude Opus 4.6 | ✅ Tested | Best overall stability in the current validation round |
-| Claude Sonnet 4.6 | ✅ Tested | Strong balance between quality and cost |
-| GPT-5.4 | ✅ Tested | Completed the current validation set with solid overall results |
-| Kimi K2.5 | ✅ Tested | Strong visual quality after serial revalidation |
-| Seed 2.0 Pro | ✅ Tested with caveats | Good chart/mockup performance, but still weaker on no-widget restraint |
-| GLM-5 | ✅ Tested | Improved noticeably after serial revalidation |
+
+| Model                  | Status                | Notes                                                                                                                        |
+| ---------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Claude Opus 4.6        | ✅ Tested              | Best overall stability in the current validation round                                                                       |
+| Claude Sonnet 4.6      | ✅ Tested              | Strong balance between quality and cost                                                                                      |
+| GPT-5.4                | ✅ Tested              | Completed the current validation set with solid overall results                                                              |
+| Kimi K2.5              | ✅ Tested              | Strong visual quality after serial revalidation                                                                              |
+| Seed 2.0 Pro           | ✅ Tested with caveats | Good chart/mockup performance, but still weaker on no-widget restraint                                                       |
+| GLM-5                  | ✅ Tested              | Improved noticeably after serial revalidation                                                                                |
 | gemini-3.1-pro-preview | ✅ Tested with caveats | Completed the 13-case validation set plus the 3D supplement; the remaining known issue is still the no-widget weather prompt |
 
-The detailed validation record lives in [`tests/prompt-validation.md`](./tests/prompt-validation.md). The current repository workflow has now covered the 13 main validation cases for Gemini and the 3D supplement (`cases 14 / 15A / 15B`) for all tested models.
+
+The detailed validation record lives in `[tests/prompt-validation.md](./tests/prompt-validation.md)`. The current repository workflow has now covered the 13 main validation cases for Gemini and the 3D supplement (`cases 14 / 15A / 15B`) for all tested models.
 
 ### Multi-model Adaptation Strategy
 
@@ -261,14 +267,15 @@ npm run test:e2e   # E2E tests plus widget rendering checks
 
 ## Milestones
 
-| Phase | Scope | Status |
-|------|------|------|
-| M0 | Technical analysis, source research, and project planning | ✅ Done |
-| M1 | Prompt Skill creation and validation | ✅ Done |
-| M2 | Rendering runtime library `@generative-ui/renderer` | ✅ Core complete |
-| M3a | Channel adaptation scripts (screenshot + drill-down + fence cleaner) | ✅ Done |
-| M3b | Telegram / Feishu integration testing | ✅ Operational |
-| M3c | Aight WKWebView integration | Not started |
+
+| Phase | Scope                                                                | Status          |
+| ----- | -------------------------------------------------------------------- | --------------- |
+| M0    | Technical analysis, source research, and project planning            | ✅ Done          |
+| M1    | Prompt Skill creation and validation                                 | ✅ Done          |
+| M2    | Rendering runtime library `generative-ui-renderer`                  | ✅ Done (published on npm) |
+| M3a   | Channel adaptation scripts (screenshot + drill-down + fence cleaner) | ✅ Done          |
+| M3b   | Telegram / Feishu / QQ integration                                   | ✅ Done          |
+
 
 For the detailed development roadmap, see [DEVELOPMENT.md](./DEVELOPMENT.md). For the channel adaptation architecture, see [architecture/m3-channel-adapters.md](./architecture/m3-channel-adapters.md).
 
@@ -278,8 +285,8 @@ For the detailed development roadmap, see [DEVELOPMENT.md](./DEVELOPMENT.md). Fo
 
 - Original article by 歸藏: [I Recreated Claude's Newly Released Generative UI Interaction](https://mp.weixin.qq.com/s/3IQIs6zP5jfdTwmT5LUJ6g)
 - Reverse-engineering article: [Reverse-engineering Claude's generative UI](https://michaellivs.com/blog/reverse-engineering-claude-generative-ui/)
-- pi-generative-ui repository: https://github.com/Michaelliv/pi-generative-ui (MIT License)
-- CodePilot repository: https://github.com/op7418/CodePilot (license not declared)
+- pi-generative-ui repository: [https://github.com/Michaelliv/pi-generative-ui](https://github.com/Michaelliv/pi-generative-ui) (MIT License)
+- CodePilot repository: [https://github.com/op7418/CodePilot](https://github.com/op7418/CodePilot) (license not declared)
 
 ---
 
