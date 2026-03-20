@@ -172,6 +172,10 @@ If you want to share it inside your own team, the recommended path is to deploy 
 
 Different message containers have very different rendering capabilities. The project defines four rendering strategies and chooses among them based on what the target channel supports:
 
+This section is meant for both end users and developers building channel integrations.
+
+If you want to install this project into channels managed by OpenClaw, or you need the OpenClaw-side setup flow, plugin installation steps, and pre-run requirements, read [INSTALL.md](./INSTALL.md) first. It contains the dedicated OpenClaw installation and configuration instructions.
+
 | Strategy | Applicable Channels | Method |
 |------|---------|------|
 | Full rendering | Web (iframe), App (WKWebView) | Complete `@generative-ui/renderer` pipeline with streaming preview and JavaScript interaction |
