@@ -136,7 +136,7 @@ export async function initBrowser() {
  * @param {Object} [options]
  * @param {string} [options.theme='light']
  * @param {number} [options.width=680]
- * @param {number} [options.deviceScaleFactor=2]
+ * @param {number} [options.deviceScaleFactor=4]
  * @param {number} [options.timeout=5000]
  * @param {number} [options.wait=0] - explicit wait override in ms (0 = auto-detect)
  * @returns {Promise<Buffer>} PNG buffer
@@ -145,7 +145,7 @@ export async function captureWidget(widgetCode, options = {}) {
   const {
     theme = 'light',
     width = 680,
-    deviceScaleFactor = 2,
+    deviceScaleFactor = 4,
     timeout = 5000,
     wait = 0,
   } = options;
