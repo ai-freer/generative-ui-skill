@@ -1,0 +1,619 @@
+<!--
+  Trigger prompt: "3D演示手表机芯的工作原理"
+  Widget type: Three.js 3D technical render (Technical mode)
+  Guidelines used: core + color-palette + 3d-scene (PBR Technical mode)
+-->
+<style>
+canvas { display: block; width: 100% !important; height: 420px !important; }
+.scene-wrap { position: relative; }
+#labels { position: absolute; top: 0; left: 0; width: 100%; height: 420px; pointer-events: none; overflow: hidden; }
+.label { position: absolute; font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; transform: translate(-50%, -100%); padding: 2px 6px; background: var(--color-bg-secondary); border-radius: 3px; }
+#controls { display: flex; align-items: center; gap: 12px; padding: 10px 0 0; font-size: 13px; color: var(--color-text-secondary); }
+</style>
+<div class="scene-wrap">
+  <canvas id="c"></canvas>
+  <div id="labels"></div>
+</div>
+<div id="controls">
+  <button id="btn" onclick="togglePlay()">Play</button>
+  <button onclick="showStep(Math.max(0,step-1))">Prev</button>
+  <button onclick="showStep(Math.min(steps.length-1,step+1))">Next</button>
+  <span id="step-label" style="flex:1"></span>
+  <label style="display:flex;align-items:center;gap:6px">
+    Explode <input type="range" min="0" max="100" value="0" step="1" style="width:80px" oninput="setExploded(this.value/100*2.5)">
+  </label>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" onload="init()"></script>
+<script>
+var scene, camera, renderer, controls;
+var updateLabels = function() {};
+var playing = false, timer, step = 0;
+var steps = [];
+
+function init() {
+  if (!window.THREE || !THREE.OrbitControls) return;
+  var canvas = document.getElementById('c');
+  var W = canvas.clientWidth, H = 420;
+  renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+  renderer.setSize(W, H);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 1000);
+  camera.position.set(2, 5, 5);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+  var sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(3, 10, 5);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.near = 0.5;
+  sun.shadow.camera.far = 30;
+  sun.shadow.camera.left = -5;
+  sun.shadow.camera.right = 5;
+  sun.shadow.camera.top = 5;
+  sun.shadow.camera.bottom = -5;
+  scene.add(sun);
+
+  controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(0.2, 0, 0);
+
+  var t = 0;
+  function animate() {
+    requestAnimationFrame(animate);
+    if (playing && window.animParts) {
+      t += 0.015;
+      if (animParts.barrel) animParts.barrel.rotation.y = t * 0.2;
+      if (animParts.center) animParts.center.rotation.y = -t * 0.5;
+      if (animParts.third) animParts.third.rotation.y = t * 1.5;
+      if (animParts.fourth) animParts.fourth.rotation.y = -t * 3;
+      if (animParts.escape) animParts.escape.rotation.y = t * 6;
+      if (animParts.pallet) animParts.pallet.rotation.y = Math.sin(t * 12) * 0.12;
+      if (animParts.balance) animParts.balance.rotation.y = Math.sin(t * 8) * 0.5;
+    }
+    controls.update();
+    updateLabels();
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+if (window.THREE && THREE.OrbitControls) init();
+
+// --- scene content starts here ---
+
+// ===================== Materials =====================
+var matBrass = new THREE.MeshStandardMaterial({ color: 0xC9A84C, metalness: 0.88, roughness: 0.25 });
+var matBrassLight = new THREE.MeshStandardMaterial({ color: 0xD4B85C, metalness: 0.85, roughness: 0.3 });
+var matSteel = new THREE.MeshStandardMaterial({ color: 0x8A8D90, metalness: 0.92, roughness: 0.2 });
+var matBluedSteel = new THREE.MeshStandardMaterial({ color: 0x2B4B8C, metalness: 0.9, roughness: 0.15 });
+var matRuby = new THREE.MeshStandardMaterial({ color: 0xC0292E, emissive: 0xC0292E, emissiveIntensity: 0.4, metalness: 0.15, roughness: 0.1 });
+var matBridge = new THREE.MeshStandardMaterial({ color: 0xB8A070, metalness: 0.75, roughness: 0.35 });
+var matPlate = new THREE.MeshStandardMaterial({ color: 0xA09580, metalness: 0.7, roughness: 0.4 });
+var matSpring = new THREE.MeshStandardMaterial({ color: 0x4477BB, metalness: 0.82, roughness: 0.3 });
+var matRhodium = new THREE.MeshStandardMaterial({ color: 0xCCCDD0, metalness: 0.95, roughness: 0.1 });
+
+// ===================== Helpers =====================
+var explodableParts = [];
+function regExplode(mesh, dir) {
+  mesh.userData.basePos = mesh.position.clone();
+  mesh.userData.explodeDir = dir;
+  explodableParts.push(mesh);
+}
+function setExploded(f) {
+  explodableParts.forEach(function(p) {
+    p.position.copy(p.userData.basePos).addScaledVector(p.userData.explodeDir, f);
+  });
+}
+
+// Gear profile using Shape — trapezoidal teeth with curved flanks
+function createGearProfile(outerR, numTeeth, toothDepth) {
+  var innerR = outerR - toothDepth;
+  var shape = new THREE.Shape();
+  var step = (Math.PI * 2) / numTeeth;
+  var midR = (innerR + outerR) * 0.52;
+  shape.moveTo(innerR, 0);
+  for (var i = 0; i < numTeeth; i++) {
+    var a = i * step;
+    // Root gap → left flank (curved) → tip → right flank (curved) → root
+    shape.lineTo(Math.cos(a + step * 0.15) * innerR, Math.sin(a + step * 0.15) * innerR);
+    shape.lineTo(Math.cos(a + step * 0.22) * midR,   Math.sin(a + step * 0.22) * midR);
+    shape.lineTo(Math.cos(a + step * 0.30) * outerR,  Math.sin(a + step * 0.30) * outerR);
+    shape.lineTo(Math.cos(a + step * 0.50) * outerR,  Math.sin(a + step * 0.50) * outerR);
+    shape.lineTo(Math.cos(a + step * 0.58) * midR,   Math.sin(a + step * 0.58) * midR);
+    shape.lineTo(Math.cos(a + step * 0.65) * innerR,  Math.sin(a + step * 0.65) * innerR);
+    shape.lineTo(Math.cos(a + step) * innerR,          Math.sin(a + step) * innerR);
+  }
+  shape.closePath();
+  return shape;
+}
+
+function createGear(outerR, numTeeth, thickness, mat, opts) {
+  opts = opts || {};
+  var toothDepth = opts.toothDepth || outerR * 0.13;
+  var spokeHoles = opts.spokeHoles || 0;
+
+  var profile = createGearProfile(outerR, numTeeth, toothDepth);
+
+  // Optional weight-reducing spoke cutouts
+  if (spokeHoles > 0) {
+    var iR = outerR - toothDepth;
+    var cutR = iR * 0.18;
+    var cutDist = iR * 0.52;
+    for (var s = 0; s < spokeHoles; s++) {
+      var sa = (s / spokeHoles) * Math.PI * 2;
+      var hole = new THREE.Path();
+      hole.absarc(Math.cos(sa) * cutDist, Math.sin(sa) * cutDist, cutR, 0, Math.PI * 2, true);
+      profile.holes.push(hole);
+    }
+  }
+
+  var geom = new THREE.ExtrudeGeometry(profile, { depth: thickness, bevelEnabled: false });
+  geom.rotateX(-Math.PI / 2);
+  geom.translate(0, -thickness / 2, 0);
+
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(geom, mat);
+  body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+
+  // Hub
+  var hubR = opts.hubR || outerR * 0.14;
+  var hub = new THREE.Mesh(new THREE.CylinderGeometry(hubR, hubR, thickness * 2, 16), mat);
+  hub.castShadow = true;
+  g.add(hub);
+  return g;
+}
+
+// Escape wheel — star-shaped pointed teeth
+function createEscapeWheel(outerR, numTeeth, thickness, mat) {
+  var innerR = outerR * 0.62;
+  var shape = new THREE.Shape();
+  var step = (Math.PI * 2) / numTeeth;
+  shape.moveTo(innerR, 0);
+  for (var i = 0; i < numTeeth; i++) {
+    var a = i * step;
+    shape.lineTo(Math.cos(a + step * 0.32) * innerR,  Math.sin(a + step * 0.32) * innerR);
+    shape.lineTo(Math.cos(a + step * 0.42) * (innerR + outerR) * 0.5, Math.sin(a + step * 0.42) * (innerR + outerR) * 0.5);
+    shape.lineTo(Math.cos(a + step * 0.50) * outerR,  Math.sin(a + step * 0.50) * outerR);
+    shape.lineTo(Math.cos(a + step * 0.58) * (innerR + outerR) * 0.5, Math.sin(a + step * 0.58) * (innerR + outerR) * 0.5);
+    shape.lineTo(Math.cos(a + step * 0.68) * innerR,  Math.sin(a + step * 0.68) * innerR);
+    shape.lineTo(Math.cos(a + step) * innerR,          Math.sin(a + step) * innerR);
+  }
+  shape.closePath();
+  var geom = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
+  geom.rotateX(-Math.PI / 2);
+  geom.translate(0, -thickness / 2, 0);
+  var g = new THREE.Group();
+  var body = new THREE.Mesh(geom, mat);
+  body.castShadow = true; body.receiveShadow = true;
+  g.add(body);
+  var hub = new THREE.Mesh(new THREE.CylinderGeometry(outerR * 0.12, outerR * 0.12, thickness * 2.5, 12), mat);
+  hub.castShadow = true;
+  g.add(hub);
+  return g;
+}
+
+// Jewel bearing (ruby in polished setting)
+function createJewel(r) {
+  var g = new THREE.Group();
+  // Setting ring
+  var setting = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.6, r * 1.6, 0.025, 16), matRhodium);
+  setting.castShadow = true;
+  g.add(setting);
+  // Ruby stone
+  var ruby = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.03, 16), matRuby);
+  ruby.position.y = 0.015;
+  g.add(ruby);
+  // Center hole
+  var hole = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.3, r * 0.3, 0.06, 8), matBluedSteel);
+  ruby.add(hole);
+  return g;
+}
+
+// Blued steel screw
+function createScrew(r) {
+  var g = new THREE.Group();
+  var head = new THREE.Mesh(new THREE.CylinderGeometry(r, r, r * 0.5, 12), matBluedSteel);
+  head.castShadow = true;
+  g.add(head);
+  // Slot
+  var slot = new THREE.Mesh(new THREE.BoxGeometry(r * 1.6, r * 0.12, r * 0.25), matSteel);
+  slot.position.y = r * 0.26;
+  g.add(slot);
+  return g;
+}
+
+// ===================== Base Plate =====================
+var basePlate = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 2.8, 0.12, 48), matPlate);
+basePlate.position.y = -0.15;
+basePlate.castShadow = true; basePlate.receiveShadow = true;
+scene.add(basePlate);
+// Plate edge bevel
+var plateRim = new THREE.Mesh(
+  new THREE.TorusGeometry(2.8, 0.06, 8, 48),
+  matPlate
+);
+plateRim.rotation.x = Math.PI / 2;
+plateRim.position.y = -0.15;
+scene.add(plateRim);
+
+// ===================== 1. Mainspring Barrel =====================
+var barrelGroup = new THREE.Group();
+
+// Barrel body with gear teeth profile
+var barrelProfile = createGearProfile(0.79, 48, 0.07);
+var barrelGeom = new THREE.ExtrudeGeometry(barrelProfile, { depth: 0.25, bevelEnabled: false });
+barrelGeom.rotateX(-Math.PI / 2);
+barrelGeom.translate(0, -0.125, 0);
+var barrelBody = new THREE.Mesh(barrelGeom, matBrass);
+barrelBody.castShadow = true; barrelBody.receiveShadow = true;
+barrelGroup.add(barrelBody);
+// Barrel lid (top disc)
+var barrelLid = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.04, 32), matBrassLight);
+barrelLid.position.y = 0.14;
+barrelLid.castShadow = true;
+barrelGroup.add(barrelLid);
+// Barrel arbor (center axle)
+var barrelArbor = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.45, 12), matSteel);
+barrelArbor.castShadow = true;
+barrelGroup.add(barrelArbor);
+// Spiral mainspring — multiple concentric arcs
+for (var si = 0; si < 6; si++) {
+  var sr = 0.12 + si * 0.08;
+  var coil = new THREE.Mesh(
+    new THREE.TorusGeometry(sr, 0.012, 6, 24, Math.PI * 1.6),
+    matSpring
+  );
+  coil.rotation.x = Math.PI / 2;
+  coil.rotation.z = si * 0.6;
+  coil.position.y = 0.05;
+  barrelGroup.add(coil);
+}
+// (barrel teeth are part of barrelBody gear profile above)
+barrelGroup.position.set(-1.1, 0.08, -0.4);
+regExplode(barrelGroup, new THREE.Vector3(-0.8, 0, -0.3));
+scene.add(barrelGroup);
+
+// Barrel jewel
+var barrelJewel = createJewel(0.055);
+barrelJewel.position.set(-1.1, 0.25, -0.4);
+regExplode(barrelJewel, new THREE.Vector3(-0.8, 0.5, -0.3));
+scene.add(barrelJewel);
+
+// ===================== 2. Center Wheel =====================
+var centerGroup = createGear(0.45, 24, 0.12, matBrass, { spokeHoles: 4 });
+// Pinion (toothed leaves on axle)
+var centerPinion = createGear(0.12, 8, 0.18, matSteel, { toothDepth: 0.025 });
+centerPinion.position.y = 0.15;
+centerGroup.add(centerPinion);
+// Axle extends both ways
+var centerAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 10), matSteel);
+centerGroup.add(centerAxle);
+centerGroup.position.set(0, 0.08, 0.2);
+regExplode(centerGroup, new THREE.Vector3(0, 0.6, 0));
+scene.add(centerGroup);
+
+var centerJewel = createJewel(0.05);
+centerJewel.position.set(0, 0.25, 0.2);
+regExplode(centerJewel, new THREE.Vector3(0, 1.0, 0));
+scene.add(centerJewel);
+
+// ===================== 3. Third Wheel =====================
+var thirdGroup = createGear(0.35, 20, 0.1, matBrass);
+var thirdPinion = createGear(0.10, 7, 0.14, matSteel, { toothDepth: 0.02 });
+thirdPinion.position.y = 0.12;
+thirdGroup.add(thirdPinion);
+var thirdAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.55, 10), matSteel);
+thirdGroup.add(thirdAxle);
+thirdGroup.position.set(0.7, 0.08, 0.9);
+regExplode(thirdGroup, new THREE.Vector3(0.3, 0.8, 0.3));
+scene.add(thirdGroup);
+
+var thirdJewel = createJewel(0.045);
+thirdJewel.position.set(0.7, 0.25, 0.9);
+regExplode(thirdJewel, new THREE.Vector3(0.3, 1.2, 0.3));
+scene.add(thirdJewel);
+
+// ===================== 4. Fourth Wheel (seconds) =====================
+var fourthGroup = createGear(0.28, 18, 0.08, matBrass);
+var fourthPinion = createGear(0.08, 6, 0.12, matSteel, { toothDepth: 0.018 });
+fourthPinion.position.y = 0.1;
+fourthGroup.add(fourthPinion);
+var fourthAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 10), matSteel);
+fourthGroup.add(fourthAxle);
+fourthGroup.position.set(0.15, 0.08, 1.4);
+regExplode(fourthGroup, new THREE.Vector3(0.1, 1.0, 0.5));
+scene.add(fourthGroup);
+
+var fourthJewel = createJewel(0.04);
+fourthJewel.position.set(0.15, 0.25, 1.4);
+regExplode(fourthJewel, new THREE.Vector3(0.1, 1.4, 0.5));
+scene.add(fourthJewel);
+
+// ===================== 5. Escape Wheel =====================
+var escapeGroup = createEscapeWheel(0.32, 15, 0.06, matSteel);
+var escapeAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 10), matSteel);
+escapeGroup.add(escapeAxle);
+escapeGroup.position.set(1.15, 0.08, 0.4);
+regExplode(escapeGroup, new THREE.Vector3(0.5, 1.2, 0.2));
+scene.add(escapeGroup);
+
+var escapeJewel = createJewel(0.04);
+escapeJewel.position.set(1.15, 0.25, 0.4);
+regExplode(escapeJewel, new THREE.Vector3(0.5, 1.6, 0.2));
+scene.add(escapeJewel);
+
+// ===================== 6. Pallet Fork (T-shape) =====================
+var palletGroup = new THREE.Group();
+// Stem
+var palletStem = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.045, 0.35), matSteel);
+palletStem.castShadow = true;
+palletGroup.add(palletStem);
+// Fork head (T-bar)
+var palletHead = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.045, 0.04), matSteel);
+palletHead.position.z = 0.18;
+palletHead.castShadow = true;
+palletGroup.add(palletHead);
+// Guard pin
+var guardPin = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 8), matRhodium);
+guardPin.rotation.x = Math.PI / 2;
+guardPin.position.set(0, 0, -0.15);
+palletGroup.add(guardPin);
+// Pallet stones (ruby)
+var pStone1 = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.04, 0.025), matRuby);
+pStone1.position.set(-0.12, 0, 0.18);
+palletGroup.add(pStone1);
+var pStone2 = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.04, 0.025), matRuby);
+pStone2.position.set(0.12, 0, 0.18);
+palletGroup.add(pStone2);
+// Axle
+var palletAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.35, 10), matSteel);
+palletGroup.add(palletAxle);
+palletGroup.position.set(1.4, 0.08, -0.15);
+regExplode(palletGroup, new THREE.Vector3(0.6, 1.4, -0.1));
+scene.add(palletGroup);
+
+var palletJewel = createJewel(0.035);
+palletJewel.position.set(1.4, 0.25, -0.15);
+regExplode(palletJewel, new THREE.Vector3(0.6, 1.8, -0.1));
+scene.add(palletJewel);
+
+// ===================== 7. Balance Wheel =====================
+var balanceGroup = new THREE.Group();
+// Rim (thick torus)
+var balanceRim = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.035, 12, 48), matSteel);
+balanceRim.rotation.x = Math.PI / 2;
+balanceRim.castShadow = true;
+balanceGroup.add(balanceRim);
+// Spokes (crossbar + perpendicular)
+var spoke1 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.03, 0.035), matSteel);
+spoke1.castShadow = true;
+balanceGroup.add(spoke1);
+var spoke2 = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.03, 0.7), matSteel);
+spoke2.castShadow = true;
+balanceGroup.add(spoke2);
+// Adjustment weights (brass screws on rim)
+for (var wi = 0; wi < 8; wi++) {
+  var wa = (wi / 8) * Math.PI * 2;
+  var weight = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.04, 8), matBrass);
+  weight.position.set(Math.cos(wa) * 0.55, 0, Math.sin(wa) * 0.55);
+  weight.castShadow = true;
+  balanceGroup.add(weight);
+}
+// Hairspring — multiple concentric flat coils
+for (var hi = 0; hi < 5; hi++) {
+  var hr = 0.08 + hi * 0.06;
+  var hairCoil = new THREE.Mesh(
+    new THREE.TorusGeometry(hr, 0.008, 6, 32, Math.PI * 1.7),
+    matSpring
+  );
+  hairCoil.rotation.x = Math.PI / 2;
+  hairCoil.rotation.z = hi * 0.7;
+  hairCoil.position.y = 0.04;
+  balanceGroup.add(hairCoil);
+}
+// Balance axle
+var balanceAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 10), matSteel);
+balanceGroup.add(balanceAxle);
+// Impulse pin
+var impulsePin = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.06, 6), matRuby);
+impulsePin.rotation.x = Math.PI / 2;
+impulsePin.position.set(0.12, 0, 0);
+balanceGroup.add(impulsePin);
+
+balanceGroup.position.set(1.4, 0.08, -1.1);
+regExplode(balanceGroup, new THREE.Vector3(0.7, 1.6, -0.5));
+scene.add(balanceGroup);
+
+var balanceJewel = createJewel(0.05);
+balanceJewel.position.set(1.4, 0.25, -1.1);
+regExplode(balanceJewel, new THREE.Vector3(0.7, 2.0, -0.5));
+scene.add(balanceJewel);
+
+// ===================== Bridges =====================
+// Train bridge (covers center + third + fourth wheels)
+var trainBridge = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.07, 1.6), matBridge);
+trainBridge.position.set(0.3, 0.3, 0.8);
+trainBridge.castShadow = true; trainBridge.receiveShadow = true;
+regExplode(trainBridge, new THREE.Vector3(0, 2.0, 0));
+scene.add(trainBridge);
+
+// Bridge cutouts (holes for axles to pass through) — dark circles
+var cutoutMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.3, roughness: 0.8 });
+[[0, 0.2], [0.7, 0.9], [0.15, 1.4]].forEach(function(pos) {
+  var cutout = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.08, 12), cutoutMat);
+  cutout.position.set(pos[0], 0.3, pos[1]);
+  regExplode(cutout, new THREE.Vector3(0, 2.0, 0));
+  scene.add(cutout);
+});
+
+// Barrel bridge
+var barrelBridge = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.07, 0.9), matBridge);
+barrelBridge.position.set(-1.0, 0.3, -0.4);
+barrelBridge.castShadow = true; barrelBridge.receiveShadow = true;
+regExplode(barrelBridge, new THREE.Vector3(-0.5, 2.0, -0.2));
+scene.add(barrelBridge);
+
+// Balance cock (curved bridge over balance wheel)
+var balanceCock = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.07, 0.7), matBridge);
+balanceCock.position.set(1.4, 0.3, -1.1);
+balanceCock.castShadow = true; balanceCock.receiveShadow = true;
+regExplode(balanceCock, new THREE.Vector3(0.5, 2.0, -0.4));
+scene.add(balanceCock);
+
+// ===================== Blued Screws =====================
+var screwPositions = [
+  // Train bridge screws
+  [-0.4, 0.37, 0.15], [1.0, 0.37, 0.2], [0.5, 0.37, 1.5],
+  // Barrel bridge screws
+  [-0.5, 0.37, -0.1], [-1.5, 0.37, -0.7],
+  // Balance cock screws
+  [1.05, 0.37, -0.85], [1.75, 0.37, -1.35],
+  // Plate screws
+  [-0.3, -0.06, -1.2], [0.8, -0.06, -0.8], [-1.5, -0.06, 0.8],
+];
+var allScrews = [];
+screwPositions.forEach(function(p) {
+  var s = createScrew(0.055);
+  s.position.set(p[0], p[1], p[2]);
+  scene.add(s);
+  allScrews.push(s);
+});
+
+// ===================== Accent PointLights =====================
+var warmLight = new THREE.PointLight(0xEF9F27, 0.6, 12, 2);
+warmLight.position.set(-2, 4, 3);
+scene.add(warmLight);
+
+var coolLight = new THREE.PointLight(0x378ADD, 0.4, 12, 2);
+coolLight.position.set(3, 3, -2);
+scene.add(coolLight);
+
+var rimLight = new THREE.PointLight(0xffffff, 0.3, 10, 2);
+rimLight.position.set(-1, 2, -3);
+scene.add(rimLight);
+
+// ===================== Ground =====================
+var ground = new THREE.Mesh(new THREE.PlaneGeometry(25, 25), new THREE.ShadowMaterial({ opacity: 0.35 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.22;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ===================== Camera =====================
+camera.position.set(1.5, 5.5, 5);
+camera.lookAt(0.2, 0, 0.2);
+
+// ===================== Animation registry =====================
+var animParts = {
+  barrel: barrelGroup,
+  center: centerGroup,
+  third: thirdGroup,
+  fourth: fourthGroup,
+  escape: escapeGroup,
+  pallet: palletGroup,
+  balance: balanceGroup
+};
+
+// ===================== Labels =====================
+var labelData = [
+  { obj: barrelGroup, text: 'Mainspring barrel', yOff: 0.5 },
+  { obj: centerGroup, text: 'Center wheel', yOff: 0.5 },
+  { obj: thirdGroup, text: 'Third wheel', yOff: 0.4 },
+  { obj: fourthGroup, text: 'Fourth wheel', yOff: 0.4 },
+  { obj: escapeGroup, text: 'Escape wheel', yOff: 0.4 },
+  { obj: palletGroup, text: 'Pallet fork', yOff: 0.35 },
+  { obj: balanceGroup, text: 'Balance ⟳', yOff: 0.5 },
+];
+var labelEls = [];
+var labelsDiv = document.getElementById('labels');
+labelData.forEach(function(d) {
+  var el = document.createElement('div');
+  el.className = 'label';
+  el.textContent = d.text;
+  labelsDiv.appendChild(el);
+  labelEls.push({ el: el, obj: d.obj, yOff: d.yOff });
+});
+
+updateLabels = function() {
+  var c = document.getElementById('c');
+  var W = c.clientWidth, H = 420;
+  labelEls.forEach(function(l) {
+    if (!l.obj.visible) { l.el.style.display = 'none'; return; }
+    var pos = new THREE.Vector3();
+    l.obj.getWorldPosition(pos);
+    pos.y += l.yOff;
+    pos.project(camera);
+    if (pos.z > 1) { l.el.style.display = 'none'; return; }
+    l.el.style.display = '';
+    l.el.style.left = (pos.x * 0.5 + 0.5) * W + 'px';
+    l.el.style.top = (-pos.y * 0.5 + 0.5) * H + 'px';
+  });
+};
+
+// ===================== Step-through =====================
+var bridges = [trainBridge, barrelBridge, balanceCock];
+var cutouts = [];
+// collect cutout meshes (they share cutoutMat)
+scene.children.forEach(function(c) { if (c.material === cutoutMat) cutouts.push(c); });
+var jewels = [barrelJewel, centerJewel, thirdJewel, fourthJewel, escapeJewel, palletJewel, balanceJewel];
+var mechParts = [barrelGroup, centerGroup, thirdGroup, fourthGroup, escapeGroup, palletGroup, balanceGroup];
+
+steps = [
+  { label: '1. Base plate — the movement\'s foundation', show: [], bridges: false },
+  { label: '2. Mainspring barrel — stores energy in a coiled spring', show: [barrelGroup], bridges: false },
+  { label: '3. Gear train — center, third & fourth wheels step up speed', show: [barrelGroup, centerGroup, thirdGroup, fourthGroup], bridges: false },
+  { label: '4. Escapement — escape wheel + pallet fork regulate release', show: [barrelGroup, centerGroup, thirdGroup, fourthGroup, escapeGroup, palletGroup], bridges: false },
+  { label: '5. Balance wheel — oscillates to divide time into equal parts', show: [barrelGroup, centerGroup, thirdGroup, fourthGroup, escapeGroup, palletGroup, balanceGroup], bridges: false },
+  { label: '6. Complete — bridges, jewels & screws assembled', show: [barrelGroup, centerGroup, thirdGroup, fourthGroup, escapeGroup, palletGroup, balanceGroup], bridges: true },
+];
+
+function showStep(n) {
+  step = n;
+  var s = steps[n];
+  mechParts.forEach(function(p) { p.visible = false; });
+  s.show.forEach(function(p) { p.visible = true; });
+  // Bridges, cutouts, jewels, screws
+  bridges.forEach(function(b) { b.visible = s.bridges; });
+  cutouts.forEach(function(c) { c.visible = s.bridges; });
+  jewels.forEach(function(j) {
+    // Show jewel if its corresponding mech part is visible
+    var idx = jewels.indexOf(j);
+    j.visible = idx < mechParts.length && mechParts[idx].visible;
+  });
+  allScrews.forEach(function(sc) { sc.visible = s.bridges; });
+  // Labels
+  labelEls.forEach(function(l) {
+    l.el.style.display = l.obj.visible ? '' : 'none';
+  });
+  document.getElementById('step-label').textContent = s.label;
+}
+
+function togglePlay() {
+  playing = !playing;
+  document.getElementById('btn').textContent = playing ? 'Pause' : 'Play';
+  if (playing) {
+    if (step < steps.length - 1) {
+      timer = setInterval(function() {
+        if (step < steps.length - 1) {
+          showStep(step + 1);
+        } else {
+          clearInterval(timer);
+        }
+      }, 2500);
+    }
+  } else {
+    clearInterval(timer);
+  }
+}
+
+showStep(0);
+</script>

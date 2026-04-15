@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "playground",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3456
+    },
+    {
+      "name": "renderer-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 0
+    }
+  ]
+}
