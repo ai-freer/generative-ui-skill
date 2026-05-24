@@ -103,6 +103,28 @@ On Web, users click elements inside the widget. On IM channels (Telegram/Feishu/
 
 ---
 
+
+## 3D Rendering (Three.js)
+
+For 3D scene requests, **read the full 3D guidelines before generating code**:
+
+```
+cat {baseDir}/prompts/guidelines/3d-scene.md
+```
+
+The 3D guideline covers:
+- **4 rendering modes**: Scene (spatial layout), Product (PBR showcase), Technical (mechanism explanation), Diagram (abstract spatial)
+- **PBR rendering pipeline**: shadow maps, ACES tone mapping, sRGB encoding, metalness/roughness tables
+- **Emissive material rules**: saturated base colors + intensity 1.5–3.5 to avoid ACES wash-out
+- **Complexity budget**: polygon limits, PointLight accents (max 4), ShadowMaterial ground
+- **Decision tree**: when to use 3D vs 2D (conservative by default)
+
+Reference examples in `{baseDir}/examples/`:
+- `synth-controller.html` — Product mode (dark showcase, LED rings, accent lights)
+- `watch-mechanism.html` — Technical mode (gear teeth via Shape+Extrude, reveal slider, animation)
+
+**Screenshot note**: use `--wait 3000` to `5000` for Three.js widgets to allow WebGL render.
+
 ## Widget Output Format
 
 Output widgets using `show-widget` code fences:
