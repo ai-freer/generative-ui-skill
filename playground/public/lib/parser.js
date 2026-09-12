@@ -305,7 +305,7 @@ function buildEarly3DShell(partialCode, shellEnd) {
 /**
  * Extract only the JS tail that still belongs to the model's main 3D script.
  * Once the source stream reaches </script>, we stop before the closing tag so
- * the injected delta stays valid JavaScript for eval().
+ * the injected delta stays valid JavaScript for incremental execution.
  */
 function extract3DInjectChunk(partialCode, start) {
   var closeIdx = partialCode.indexOf('</script>', start);
