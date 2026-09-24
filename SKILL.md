@@ -75,6 +75,8 @@ send: { to: "<chat_id>", media: "<png_path>", caption: "<widget_title>", buttons
 
 Note: the drill-down script outputs a `telegram` field as a reference payload only. Re-pack buttons into compact rows yourself if the current channel supports that layout.
 
+**Telegram `callback_data` limit:** keep each `callback_data` ≤ 64 bytes — shorten by removing redundant text/punctuation and limiting Chinese characters (3 bytes each in UTF-8). Verify with `len(s.encode('utf-8'))` before sending; never send the buttons without this check.
+
 For other channels (Feishu, QQ, etc.), use the channel's native button format. The drill-down script provides the query text — adapt it to whatever button structure the current channel supports.
 
 ### Widget Interactivity on IM Channels
